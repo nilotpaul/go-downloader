@@ -1,0 +1,8 @@
+tmp
+bin
+.env
+*.env
+env.*
+*.prod
+media
+node_modules
