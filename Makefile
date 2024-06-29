@@ -6,7 +6,7 @@ run: build
 build:
 	@templ fmt ./www
 	@templ generate
-	@pnpm tailwindcss -i ./www/css/app.css -o ./public/styles.css
+	@pnpm tailwindcss -i ./www/css/app.css -o ./public/styles.css --minify
 	@go build -tags '!dev' -o bin/go-downloader
 
 css:

@@ -1,4 +1,4 @@
-// static_dev.go
+// main_dev.go
 
 //go:build dev
 // +build dev

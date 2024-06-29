@@ -1,15 +1,29 @@
 package layout
 
+import "github.com/nilotpaul/go-downloader/www/component"
+
 templ Base() {
 	<!DOCTYPE html>
-	<html lang="en">
+	<html lang="en" data-theme="">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<link href="./public/styles.css" rel="stylesheet"/>
 			<title>Go Downloader</title>
+			<script>
+				(function() {
+  					  const storedTheme = localStorage.getItem("theme");
+  					  const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)").matches;
+   					  const theme = storedTheme || (prefersDarkScheme ? "dark" : "garden");
+ 					   if (!storedTheme) {
+   						   localStorage.setItem("theme", theme);
+ 					   }
+  					  document.documentElement.setAttribute("data-theme", theme);
+ 				 })();
+			</script>
 		</head>
 		<body class="max-w-6xl mx-auto antialiased">
+			@component.Theme()
 			{ children... }
 		</body>
 	</html>
