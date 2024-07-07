@@ -40,3 +40,7 @@ I will add the feature for multiple accounts later. For now, I will focus on imp
 2. Client
 3. Multiple Accounts
 4. More Providers
+
+---
+
+Sorry, commit history is a huge mess 😢
