@@ -42,7 +42,7 @@ func GetSessionToken(c *fiber.Ctx) string {
 	return c.Cookies(setting.SessionKey, "")
 }
 
-func VerifyAndDecodeSessionToken(c *fiber.Ctx, tokenStr string, secret string) (*types.JWTSession, error) {
+func VerifyAndDecodeSessionToken(tokenStr string, secret string) (*types.JWTSession, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("invalid signing method: %v", t.Method.Alg())
@@ -88,12 +88,12 @@ func GetSessionFromStore(c *fiber.Ctx, store *session.Store) (*types.GoogleAccou
 	if session == nil {
 		return nil, fmt.Errorf("no session found")
 	}
-	acc, ok := session.(types.GoogleAccount)
+	v, ok := session.(types.GoogleAccountWrapper)
 	if !ok {
 		return nil, fmt.Errorf("invalid session type")
 	}
 
-	return &acc, nil
+	return v.GoogleAccount, nil
 }
 
 func SetSessionInStore(c *fiber.Ctx, store *session.Store, acc *types.GoogleAccount) error {
@@ -102,7 +102,9 @@ func SetSessionInStore(c *fiber.Ctx, store *session.Store, acc *types.GoogleAcco
 		return err
 	}
 
-	sess.Set(setting.SessionKey, acc)
+	sess.Set(setting.SessionKey, types.GoogleAccountWrapper{
+		GoogleAccount: acc,
+	})
 	if err := sess.Save(); err != nil {
 		return err
 	}
@@ -110,7 +112,7 @@ func SetSessionInStore(c *fiber.Ctx, store *session.Store, acc *types.GoogleAcco
 	return nil
 }
 
-func ResetSession(c *fiber.Ctx) {
+func ResetSession(c *fiber.Ctx, r types.OAuthProvider) error {
 	c.Cookie(&fiber.Cookie{
 		Name:     setting.SessionKey,
 		Path:     "/",
@@ -123,4 +125,5 @@ func ResetSession(c *fiber.Ctx) {
 		HTTPOnly: true,
 		Expires:  time.Now().AddDate(-100, 0, 0),
 	})
+	return r.UpdateTokens(nil)
 }

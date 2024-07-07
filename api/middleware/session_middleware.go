@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/nilotpaul/go-downloader/config"
 	"github.com/nilotpaul/go-downloader/service"
@@ -34,47 +35,13 @@ func NewSessionMiddleware(env config.EnvConfig, sessStore *session.Store, db *sq
 }
 
 func init() {
-	gob.Register(types.GoogleAccount{})
+	gob.Register(types.GoogleAccountWrapper{})
 }
 
-// SessionMiddleware will check if the validity of AccessToken token,
-// if invalid it'll refresh the token and return the new credentions.
-// values are create and updated in order to maintain the synchronicity.
+// SessionMiddleware will check the validity of AccessToken token,
+// if it's invalid it'll refresh the token and return the new credentials.
+// Values are created and updated in order to maintain the synchronicity.
 func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
-	// GetSessionToken gets the jwt token from the cookie
-	// which contains the UserID and JWT Expiry.
-	token := util.GetSessionToken(c)
-	if len(token) == 0 {
-		slog.Error("SessionMiddleware", "error", "token length 0")
-		return c.Next()
-	}
-	// verifies and extracts the UserID from JWT Token.
-	decoded, err := util.VerifyAndDecodeSessionToken(c, token, m.env.SessionSecret)
-	if err != nil {
-		return util.NewAppError(
-			http.StatusBadRequest,
-			"invalid session",
-			"SessionMiddleware error: ",
-			err,
-		)
-	}
-
-	session, err := service.GetAccountByUserID(m.db, decoded.UserID)
-	if err != nil {
-		return util.NewAppError(
-			http.StatusInternalServerError,
-			"invalid session",
-			"SessionMiddleware error: ",
-			err,
-		)
-	}
-	if session == nil {
-		return util.NewAppError(
-			http.StatusNotFound,
-			"no account found",
-		)
-	}
-
 	gp, err := m.registry.GetProvider(setting.GoogleProvider)
 	if err != nil {
 		return util.NewAppError(
@@ -85,9 +52,48 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 		)
 	}
 
-	// injecting provider with the old and potentially (expired/invalid) tokens,
+	// GetSessionToken gets the jwt token from the cookie
+	// which contains the UserID and JWT Expiry.
+	token := util.GetSessionToken(c)
+	if len(token) == 0 {
+		m.resetPersistingSession(c, gp)
+		slog.Error("SessionMiddleware", "error", "token length 0")
+		return c.Next()
+	}
+	// Verifies and extracts the UserID from JWT Token.
+	decoded, err := util.VerifyAndDecodeSessionToken(token, m.env.SessionSecret)
+	if err != nil {
+		m.resetPersistingSession(c, gp)
+		return util.NewAppError(
+			http.StatusBadRequest,
+			"invalid session",
+			"SessionMiddleware error: ",
+			err,
+		)
+	}
+
+	session, err := service.GetAccountByUserID(m.db, decoded.UserID)
+	if err != nil {
+		m.resetPersistingSession(c, gp)
+		return util.NewAppError(
+			http.StatusInternalServerError,
+			"invalid session",
+			"SessionMiddleware error: ",
+			err,
+		)
+	}
+	if session == nil {
+		m.resetPersistingSession(c, gp)
+		return util.NewAppError(
+			http.StatusNotFound,
+			"no account found",
+		)
+	}
+
+	// Injecting provider with the old and potentially (expired/invalid) tokens,
 	// so that it can be used to refresh the token later.
 	if err := gp.UpdateTokens(session); err != nil {
+		m.resetPersistingSession(c, gp)
 		return util.NewAppError(
 			http.StatusInternalServerError,
 			fmt.Errorf("failed to update the tokens: %s", err.Error()).Error(),
@@ -95,14 +101,15 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 			err,
 		)
 	}
-	// if token has expired or is invalid, RefreshToken will generate a new
+	// If token has expired or is invalid, RefreshToken will generate a new
 	// AccessToken and update the user account in database.
 	if !gp.IsTokenValid() {
-		t, err := gp.RefreshToken(c, session.UserId)
+		t, err := gp.RefreshToken(c, session.UserID)
 		if err != nil {
+			m.resetPersistingSession(c, gp)
 			return util.NewAppError(
 				http.StatusInternalServerError,
-				fmt.Errorf("failed to refresh the token: %s", err.Error()).Error(),
+				fmt.Sprintf("failed to refresh the token: %s", err.Error()),
 				"SessionMiddleware error: ",
 				err,
 			)
@@ -114,8 +121,9 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 		session.ExpiresAt = t.Expiry
 	}
 
-	// injecting provider with the new tokens,
+	// Injecting provider with the new tokens,
 	if err := gp.UpdateTokens(session); err != nil {
+		m.resetPersistingSession(c, gp)
 		return util.NewAppError(
 			http.StatusInternalServerError,
 			"failed to update the tokens",
@@ -123,8 +131,9 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 			err,
 		)
 	}
-	// setting the session in the in memory session store.
+	// Setting the session in the in memory session store.
 	if err := util.SetSessionInStore(c, m.sessStore, session); err != nil {
+		m.resetPersistingSession(c, gp)
 		return util.NewAppError(
 			http.StatusInternalServerError,
 			"failed to set the session in store",
@@ -132,6 +141,12 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 			err,
 		)
 	}
+
+	// Set the UserID in the request, already done in Session Storage
+	// but this will be used in websocket conns as the type of
+	// fiber.Ctx and websocket.Conn doesn't match, hence retrieving
+	// sessions from storage is not possible as it requires fiber.Ctx.
+	c.Locals(setting.LocalSessionKey, session.UserID)
 
 	return c.Next()
 }
@@ -141,15 +156,17 @@ func (m *SessionMiddleware) WithGoogleOAuth(c *fiber.Ctx) error {
 	gp, err := m.registry.GetProvider(setting.GoogleProvider)
 	if err != nil {
 		return util.NewAppError(
-			http.StatusNotFound,
+			http.StatusUnauthorized,
 			"no provider found",
 		)
 	}
 
+	fmt.Println(gp.IsTokenValid())
+
 	if !gp.IsTokenValid() {
 		return util.NewAppError(
 			http.StatusUnauthorized,
-			"invalid oauth token",
+			"invalid session, please login",
 		)
 	}
 
@@ -174,4 +191,13 @@ func (m *SessionMiddleware) WithoutGoogleOAuth(c *fiber.Ctx) error {
 	}
 
 	return c.Next()
+}
+
+func (m *SessionMiddleware) resetPersistingSession(c *fiber.Ctx, gp types.OAuthProvider) {
+	if err := gp.UpdateTokens(nil); err != nil {
+		log.Error("failed reseting session(UpdateTokens): ", err)
+	}
+	if err := util.SetSessionInStore(c, m.sessStore, nil); err != nil {
+		log.Error("failed reseting session(SetSessionInStore): ", err)
+	}
 }

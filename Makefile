@@ -4,16 +4,7 @@ run: build
 	@./bin/go-downloader
 	
 build:
-	@templ fmt ./www
-	@templ generate
-	@pnpm tailwindcss -i ./www/css/app.css -o ./public/styles.css --minify
-	@go build -tags '!dev' -o bin/go-downloader
-
-css:
-	@pnpm tailwindcss -i ./www/css/app.css -o ./public/styles.css --watch
-
-templ:
-	@templ generate -watch --proxy=http://localhost:$(PORT) 
+	@go build -o bin/go-downloader
 
 test:
 	@go test -v ../...

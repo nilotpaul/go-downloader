@@ -1,1 +1,0 @@
-just here to not keep the public folder empty, otherwise we'll get no "embedable files" error.

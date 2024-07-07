@@ -87,7 +87,7 @@ func CreateUserAndAccount(db *sql.DB, user *types.GoogleUserResponse, token *oau
 			expires_at,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 	_, err = tx.Exec(
 		accQuery,
@@ -141,7 +141,7 @@ func GetAccountByUserID(db *sql.DB, userID string) (*types.GoogleAccount, error)
 	row := db.QueryRow(query, userID)
 	err := row.Scan(
 		&acc.ID,
-		&acc.UserId,
+		&acc.UserID,
 		&acc.AccessToken,
 		&acc.RefreshToken,
 		&acc.ExpiresAt,
@@ -173,6 +173,23 @@ func GetUserByEmail(db *sql.DB, email string) (*types.User, error) {
 	return &u, nil
 }
 
+func GetUserByID(db *sql.DB, userID string) (*types.User, error) {
+	const query = `SELECT * FROM users WHERE id = $1`
+
+	var u types.User
+	row := db.QueryRow(query, userID)
+	err := row.Scan(
+		&u.UserID,
+		&u.Email,
+		&u.CreatedAt,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	return &u, nil
+}
+
 func UpdateAccountByUserID(db *sql.DB, userID string, acc *types.GoogleAccount) error {
 	const query = `
 	    UPDATE google_accounts
@@ -181,7 +198,7 @@ func UpdateAccountByUserID(db *sql.DB, userID string, acc *types.GoogleAccount) 
 			refresh_token = $2,
 			token_type = $3,
 			expires_at = $4,
-			updated_at = $5
+			updated_at = $6
 		WHERE
             user_id = $5
 	`

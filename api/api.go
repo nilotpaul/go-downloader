@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	MW "github.com/nilotpaul/go-downloader/api/middleware"
 	"github.com/nilotpaul/go-downloader/config"
@@ -13,23 +14,19 @@ import (
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
-type publicFunc func() http.Handler
-
 type APIServer struct {
 	listenAddr string
 	env        config.EnvConfig
 	registry   *store.ProviderRegistry
 	db         *sql.DB
-	publicFunc publicFunc
 }
 
-func NewAPIServer(listenAddr string, env config.EnvConfig, registry *store.ProviderRegistry, db *sql.DB, publicFunc publicFunc) *APIServer {
+func NewAPIServer(listenAddr string, env config.EnvConfig, registry *store.ProviderRegistry, db *sql.DB) *APIServer {
 	return &APIServer{
 		listenAddr: listenAddr,
 		env:        env,
 		registry:   registry,
 		db:         db,
-		publicFunc: publicFunc,
 	}
 }
 
@@ -43,12 +40,15 @@ func (s *APIServer) Start() error {
 	})
 
 	app.Use(logger)
-	app.Use("/public/*", makeFiberHandler(s.publicFunc()))
+	app.Use(cors.New(cors.Config{
+		AllowCredentials: true,
+		AllowOrigins:     "http://localhost:3000,http://127.0.0.1:7331",
+		AllowMethods:     "GET,POST",
+	}))
 
 	v1 := app.Group("/api/v1")
 
 	handler := NewRouter(s.registry, s.env, s.db)
-	handler.RegisterTemplRoutes(app)
 	handler.RegisterRoutes(v1)
 
 	log.Printf("Server started on http://localhost:%s", s.listenAddr)

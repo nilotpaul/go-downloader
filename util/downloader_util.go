@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,6 +10,18 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v2"
 	"google.golang.org/api/option"
+)
+
+const (
+	_          = iota // ignore first value by assigning to blank identifier
+	KB float64 = 1 << (10 * iota)
+	MB
+	GB
+	TB
+	PB
+	EB
+	ZB
+	YB
 )
 
 func SanitizeFileName(fileName string) string {
@@ -52,4 +65,59 @@ func CreateFile(path string) (*os.File, error) {
 	}
 
 	return f, nil
+}
+
+func GetGDriveFileID(url string) string {
+	var fileID string
+	exp1 := regexp.MustCompile(`drive\.google\.com\/open\?id\=(.*)`)
+	exp2 := regexp.MustCompile(`drive\.google\.com\/file\/d\/(.*?)\/`)
+	exp3 := regexp.MustCompile(`drive\.google\.com\/uc\?id\=(.*?)\&`)
+
+	if matches := exp1.FindStringSubmatch(url); len(matches) > 1 {
+		fileID = matches[1]
+	} else if matches := exp2.FindStringSubmatch(url); len(matches) > 1 {
+		fileID = matches[1]
+	} else if matches := exp3.FindStringSubmatch(url); len(matches) > 1 {
+		fileID = matches[1]
+	} else {
+		fileID = ""
+	}
+
+	return fileID
+}
+
+// FormatBytes returns a human-readable string representation
+// of bytes in appropriate units
+func FormatBytes(bytes int64) string {
+	unit := ""
+	size := float64(bytes)
+
+	switch {
+	case size >= YB:
+		unit = "YB"
+		size /= YB
+	case size >= ZB:
+		unit = "ZB"
+		size /= ZB
+	case size >= EB:
+		unit = "EB"
+		size /= EB
+	case size >= PB:
+		unit = "PB"
+		size /= PB
+	case size >= TB:
+		unit = "TB"
+		size /= TB
+	case size >= GB:
+		unit = "GB"
+		size /= GB
+	case size >= MB:
+		unit = "MB"
+		size /= MB
+	case size >= KB:
+		unit = "KB"
+		size /= KB
+	}
+
+	return fmt.Sprintf("%.2f %s", size, unit)
 }

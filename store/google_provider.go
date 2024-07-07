@@ -227,6 +227,11 @@ func (g *GoogleProvider) CreateSession(c *fiber.Ctx, userID string) error {
 }
 
 func (g *GoogleProvider) UpdateTokens(acc *types.GoogleAccount) error {
+	if acc == nil {
+		g.Token = nil
+		return nil
+	}
+
 	g.Token = &oauth2.Token{
 		AccessToken:  acc.AccessToken,
 		RefreshToken: acc.RefreshToken,

@@ -13,9 +13,10 @@ import (
 )
 
 type Router struct {
-	registry *store.ProviderRegistry
-	env      config.EnvConfig
-	db       *sql.DB
+	registry  *store.ProviderRegistry
+	env       config.EnvConfig
+	db        *sql.DB
+	sessStore *session.Store
 }
 
 func NewRouter(registry *store.ProviderRegistry, env config.EnvConfig, db *sql.DB) *Router {
@@ -29,6 +30,7 @@ func NewRouter(registry *store.ProviderRegistry, env config.EnvConfig, db *sql.D
 func (h *Router) RegisterRoutes(r fiber.Router) {
 	// creates an in memory storage for session.
 	store := session.New()
+	h.sessStore = store
 
 	r.Get("/healthcheck", func(c *fiber.Ctx) error {
 		return c.JSON("OK")
@@ -36,30 +38,34 @@ func (h *Router) RegisterRoutes(r fiber.Router) {
 
 	// Middlewares
 	sessionMW := MW.NewSessionMiddleware(h.env, store, h.db, h.registry)
+	r.Use(sessionMW.SessionMiddleware)
 
 	// OAuth Handler for google.
-	googleHR := handler.NewGoogleHandler(h.registry)
+	googleHR := handler.NewGoogleHandler(h.registry, store, h.db)
 	r.Get("/signin/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleSignInHandler)
-	r.Post("/callback/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleCallbackHandler)
+	r.Get("/callback/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleCallbackHandler)
+	r.Get("/session",
+		sessionMW.WithGoogleOAuth,
+		googleHR.GetSessionHandler,
+	)
 	r.Post("/logout", sessionMW.WithGoogleOAuth, googleHR.LogoutHandler)
 
-	downloadHR := handler.NewDownloadHandler(h.registry)
+	downloadHR := handler.NewDownloadHandler(h.registry, h.sessStore)
 	r.Get("/download",
-		sessionMW.SessionMiddleware,
 		sessionMW.WithGoogleOAuth,
 		downloadHR.DownloadHandler,
+	)
+	r.Get("/ws/progress",
+		sessionMW.WithGoogleOAuth,
+		util.MakeWebsocketHandler(downloadHR.ProgressWebsocketHandler),
 	)
 
 	// just for testing
 	r.Get("/test",
-		sessionMW.SessionMiddleware,
 		sessionMW.WithGoogleOAuth,
 		func(c *fiber.Ctx) error {
 			s, _ := util.GetSessionFromStore(c, store)
 			return c.JSON(s)
 		})
-}
 
-func (h *Router) RegisterTemplRoutes(r fiber.Router) {
-	r.Get("/", handler.HomeHandler)
 }

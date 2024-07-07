@@ -10,13 +10,17 @@ type User struct {
 
 type GoogleAccount struct {
 	ID           string    `json:"id"`
-	UserId       string    `json:"user_id"`
+	UserID       string    `json:"user_id"`
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	TokenType    string    `json:"token_type"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type GoogleAccountWrapper struct {
+	GoogleAccount *GoogleAccount
 }
 
 type GoogleUserResponse struct {

@@ -6,7 +6,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/nilotpaul/go-downloader/util"
-	"github.com/nilotpaul/go-downloader/www/page"
 )
 
 func ErrorHandler(c *fiber.Ctx, err error) error {
@@ -24,10 +23,6 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 	}
 	if fiberErr, ok := err.(*fiber.Error); ok {
 		status = fiberErr.Code
-
-		if fiberErr.Code == http.StatusNotFound {
-			return util.MakeTempl(c, page.NotFound())
-		}
 
 		return c.Status(status).JSON(fiber.Map{
 			"status": status,
