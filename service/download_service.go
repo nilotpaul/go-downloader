@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/nilotpaul/go-downloader/types"
@@ -77,6 +78,11 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 
 			totalWritten += int64(written)
 			prog.Current = int(float64(totalWritten) / float64(file.FileSize) * 100)
+			elapsedTime := time.Since(prog.StartTime).Seconds()
+			if elapsedTime > 0 {
+				speed := ((float64(totalWritten) / elapsedTime) / 1e6) // Speed in Mbps
+				prog.Speed = math.Round(speed*100) / 100               // Rounded to two decimal places
+			}
 
 			// Updating the downloading progress
 			progressChan <- prog

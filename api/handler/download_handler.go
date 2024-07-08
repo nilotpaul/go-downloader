@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -117,7 +116,6 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 			}
 		}
 
-		fmt.Println(len(h.downloader.ErrChans))
 		for fileID, errChan := range h.downloader.ErrChans {
 			select {
 			case err := <-errChan:

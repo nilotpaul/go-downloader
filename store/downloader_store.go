@@ -51,7 +51,7 @@ func (d *Downloader) StartDownload(accToken string, fileName string) error {
 				log.Errorf("error downloading file %s: %v\n ", fileID, err)
 				errChan <- err
 
-				d.cleanUp(fileID)
+				d.cleanUp(fileID, progChan)
 				return
 			}
 		}(fileID)
@@ -65,7 +65,7 @@ func (d *Downloader) StartDownload(accToken string, fileName string) error {
 				d.pendingDownloadsMu.Unlock()
 
 				if prog.Complete {
-					d.cleanUp(fileID)
+					d.cleanUp(fileID, progChan)
 					break
 				}
 			}
@@ -131,12 +131,12 @@ func (d *Downloader) DeleteProgress(fileID string) {
 	delete(d.PendingDownloads, fileID)
 }
 
-func (d *Downloader) cleanUp(fileID string) {
+func (d *Downloader) cleanUp(fileID string, progChan chan *types.Progress) {
 	d.pendingDownloadsMu.Lock()
 	delete(d.PendingDownloads, fileID)
 	d.pendingDownloadsMu.Unlock()
 
-	close(d.progressChans[fileID])
+	close(progChan)
 	close(d.ErrChans[fileID])
 	delete(d.ErrChans, fileID)
 }

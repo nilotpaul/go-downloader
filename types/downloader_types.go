@@ -11,6 +11,7 @@ type Progress struct {
 	ReadableSize string    `json:"readableSize"`
 	StartTime    time.Time `json:"startTime"`
 	EndTime      time.Time `json:"endTime"`
+	Speed        float64   `json:"speed"`
 }
 
 type Downloader interface {
