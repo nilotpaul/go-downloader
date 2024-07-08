@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/nilotpaul/go-downloader/types"
@@ -20,10 +21,6 @@ type DownloaderConfig struct {
 // GDriveDownloader will fallback to the original filename in if the filename parameter
 // is an empty string.
 func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress) error {
-	defer func() {
-		close(progressChan)
-	}()
-
 	if err := validateDownloaderConfig(cfg); err != nil {
 		return err
 	}
@@ -35,15 +32,16 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 
 	file, err := srv.Files.Get(cfg.FileID).Do()
 	if err != nil {
-		return fmt.Errorf("failed with %d to get file info: %s", file.HTTPStatusCode, err.Error())
+		return fmt.Errorf("failed to get file info: %v", err.Error())
 	}
 	if len(cfg.FileName) == 0 {
 		cfg.FileName = file.OriginalFilename
 	}
 
-	destFile, err := util.CreateFile(cfg.DestinationPath + "/" + util.SanitizeFileName(cfg.FileName))
+	destFileName := cfg.DestinationPath + "/" + util.SanitizeFileName(cfg.FileName)
+	destFile, err := util.CreateFile(destFileName)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file")
+		return fmt.Errorf("failed to create destination file %s", destFileName)
 	}
 	defer destFile.Close()
 
@@ -55,6 +53,8 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 
 	buf := make([]byte, 32*1024) // 32KB buffer
 	var totalWritten int64
+
+	slog.Info("downloading", "filename", file.OriginalFilename)
 
 	prog := &types.Progress{
 		FileID:       cfg.FileID,
@@ -85,7 +85,7 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 			if err == io.EOF {
 				break
 			}
-			return fmt.Errorf("failed to read response body")
+			return fmt.Errorf("failed to read response body of the file %s", file.OriginalFilename)
 		}
 	}
 

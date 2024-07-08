@@ -161,8 +161,6 @@ func (m *SessionMiddleware) WithGoogleOAuth(c *fiber.Ctx) error {
 		)
 	}
 
-	fmt.Println(gp.IsTokenValid())
-
 	if !gp.IsTokenValid() {
 		return util.NewAppError(
 			http.StatusUnauthorized,

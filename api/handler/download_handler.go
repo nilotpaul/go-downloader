@@ -2,10 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gofiber/contrib/websocket"
@@ -23,34 +23,27 @@ type DownloadHandler struct {
 }
 
 func NewDownloadHandler(registry *store.ProviderRegistry, sessStore *session.Store) *DownloadHandler {
-	d := store.NewDownloader(make([]string, 0), "")
-
 	return &DownloadHandler{
 		registry:   registry,
-		downloader: d,
 		sessStore:  sessStore,
+		downloader: store.NewDownloader(make([]string, 0), ""),
 	}
 }
 
 func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
-	link := c.Query("link", "")
-	if len(link) == 0 {
+	linksStr := c.Query("links", "")
+	if len(linksStr) == 0 {
 		return util.NewAppError(
 			http.StatusBadRequest,
-			"invalid link",
+			"invalid link(s)",
 		)
 	}
-	if ok := strings.Contains(link, ","); ok {
-		return util.NewAppError(
-			http.StatusNotImplemented,
-			"multiple links are not currently supported",
-		)
-	}
-	fileID := util.GetGDriveFileID(link)
-	if len(fileID) == 0 {
+
+	fileIDs := util.GetFileIDs(linksStr)
+	if len(fileIDs) == 0 {
 		return util.NewAppError(
 			http.StatusBadRequest,
-			"invalid link",
+			"invalid link(s)",
 		)
 	}
 
@@ -70,11 +63,11 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 		)
 	}
 
-	h.downloader.FileIds = []string{fileID}
+	h.downloader.FileIds = fileIDs
 	h.downloader.DestinationPath = "./media"
 	h.downloader.UserID = sess.UserID
 
-	slog.Info("downloading", "GDriveURL", link, "fileID", fileID)
+	slog.Info("downloading", "GDrive fileIDs: ", fileIDs)
 
 	t := gp.GetAccessToken()
 	if err := h.downloader.StartDownload(t, ""); err != nil {
@@ -82,7 +75,7 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"fileID": fileID,
+		"fileID": fileIDs,
 	})
 }
 
@@ -101,14 +94,6 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 		)
 	}
 
-	fileID := c.Query("fileID", "")
-	if len(fileID) == 0 {
-		return util.NewAppError(
-			websocket.TextMessage,
-			"invalid fileID",
-		)
-	}
-
 	uID, ok := c.Locals(setting.LocalSessionKey).(string)
 	if !ok {
 		return util.NewAppError(
@@ -116,22 +101,9 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 			"invalid UserID",
 		)
 	}
-
-	infoMsg := []byte("you can only receive updates, cannot send messages")
-	if err := c.WriteMessage(websocket.TextMessage, infoMsg); err != nil {
-		log.Println("Error sending info message:", err)
-	}
-
 	for {
-		prog, err := h.downloader.GetProgress(fileID, uID)
-		if err != nil {
-			return util.NewAppError(
-				websocket.TextMessage,
-				"no ongoing downloads found with this fileID",
-			)
-		}
-
-		progressJSON, err := json.Marshal(prog)
+		pendings, _ := h.downloader.GetPendingDownloads(uID)
+		progressJSON, err := json.Marshal(pendings)
 		if err != nil {
 			return util.NewAppError(
 				websocket.TextMessage,
@@ -139,11 +111,33 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 			)
 		}
 
-		if err := c.WriteMessage(websocket.TextMessage, progressJSON); err != nil {
-			return err
+		if pendings != nil {
+			if err := c.WriteMessage(websocket.TextMessage, progressJSON); err != nil {
+				return err
+			}
 		}
 
-		if prog.Complete {
+		fmt.Println(len(h.downloader.ErrChans))
+		for fileID, errChan := range h.downloader.ErrChans {
+			select {
+			case err := <-errChan:
+				errJSON, err := json.Marshal(fiber.Map{
+					"file_id": fileID,
+					"errMsg":  err.Error(),
+				})
+				if err != nil {
+					if writeErr := c.WriteMessage(websocket.TextMessage, []byte("error marshalling failed")); writeErr != nil {
+						return err
+					}
+				}
+				if writeErr := c.WriteMessage(websocket.TextMessage, errJSON); writeErr != nil {
+					return err
+				}
+			default:
+			}
+		}
+
+		if len(pendings) == 0 {
 			break
 		}
 
@@ -151,5 +145,5 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 		time.Sleep(1500 * time.Millisecond)
 	}
 
-	return c.WriteMessage(websocket.TextMessage, []byte("download completed"))
+	return c.WriteMessage(websocket.TextMessage, []byte("no pending downloads"))
 }

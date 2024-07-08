@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v2"
@@ -84,6 +85,20 @@ func GetGDriveFileID(url string) string {
 	}
 
 	return fileID
+}
+
+func GetFileIDs(linksStr string) []string {
+	var fileIds []string
+
+	links := strings.Split(linksStr, ",")
+	for _, link := range links {
+		fileID := GetGDriveFileID(link)
+		if len(fileID) != 0 {
+			fileIds = append(fileIds, fileID)
+		}
+	}
+
+	return fileIds
 }
 
 // FormatBytes returns a human-readable string representation
