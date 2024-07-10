@@ -48,7 +48,9 @@ func (h *GoogleHandler) GoogleSignInHandler(c *fiber.Ctx) error {
 		)
 	}
 
-	return c.Redirect(authURL, http.StatusTemporaryRedirect)
+	return c.JSON(fiber.Map{
+		"url": authURL,
+	})
 }
 
 func (h *GoogleHandler) GoogleCallbackHandler(c *fiber.Ctx) error {

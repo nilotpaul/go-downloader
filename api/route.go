@@ -42,30 +42,13 @@ func (h *Router) RegisterRoutes(r fiber.Router) {
 
 	// OAuth Handler for google.
 	googleHR := handler.NewGoogleHandler(h.registry, store, h.db)
-	r.Get("/signin/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleSignInHandler)
+	r.Post("/signin/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleSignInHandler)
 	r.Get("/callback/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleCallbackHandler)
-	r.Get("/session",
-		sessionMW.WithGoogleOAuth,
-		googleHR.GetSessionHandler,
-	)
+	r.Get("/session", sessionMW.WithGoogleOAuth, googleHR.GetSessionHandler)
 	r.Post("/logout", sessionMW.WithGoogleOAuth, googleHR.LogoutHandler)
 
 	downloadHR := handler.NewDownloadHandler(h.registry, h.sessStore)
-	r.Get("/download",
-		sessionMW.WithGoogleOAuth,
-		downloadHR.DownloadHandler,
-	)
-	r.Get("/ws/progress",
-		sessionMW.WithGoogleOAuth,
-		util.MakeWebsocketHandler(downloadHR.ProgressWebsocketHandler),
-	)
-
-	// just for testing
-	r.Get("/test",
-		sessionMW.WithGoogleOAuth,
-		func(c *fiber.Ctx) error {
-			s, _ := util.GetSessionFromStore(c, store)
-			return c.JSON(s)
-		})
-
+	r.Get("/download", sessionMW.WithGoogleOAuth, downloadHR.DownloadHandler)
+	r.Get("/progress", downloadHR.ProgressHTTPHandler)
+	r.Get("/ws/progress", util.MakeWebsocketHandler(downloadHR.ProgressWebsocketHandler))
 }

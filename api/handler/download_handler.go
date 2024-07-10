@@ -78,8 +78,29 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"fileID": fileIDs,
+		"status":   http.StatusOK,
+		"file_ids": fileIDs,
 	})
+}
+
+func (h *DownloadHandler) ProgressHTTPHandler(c *fiber.Ctx) error {
+	sess, err := util.GetSessionFromStore(c, h.sessStore)
+	if err != nil {
+		return util.NewAppError(
+			http.StatusNotFound,
+			"failed to retrieve session from store",
+		)
+	}
+
+	pendings, _ := h.downloader.GetPendingDownloads(sess.UserID)
+	if len(pendings) == 0 {
+		return util.NewAppError(
+			http.StatusNotFound,
+			"no pending downloads",
+		)
+	}
+
+	return c.JSON(pendings)
 }
 
 func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
@@ -147,5 +168,12 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 		time.Sleep(1500 * time.Millisecond)
 	}
 
-	return c.WriteMessage(websocket.TextMessage, []byte("no pending downloads"))
+	infoMsg, err := json.Marshal(fiber.Map{
+		"infoMsg": "no pending downloads",
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.WriteMessage(websocket.TextMessage, infoMsg)
 }

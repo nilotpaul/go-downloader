@@ -43,13 +43,29 @@ func DecodeJSON(r io.Reader, target interface{}) error {
 func writeErrorResponse(c *websocket.Conn, err error) {
 	if appErr, ok := err.(*AppError); ok {
 		slog.Error("WS error", "errMsg", appErr.Error(), "status", appErr.Status, "err", appErr.Err)
-		err := c.WriteMessage(appErr.Status, []byte(appErr.Error()))
+
+		errMsg, marshallErr := json.Marshal(fiber.Map{
+			"errMsg": err.Error(),
+		})
+		if marshallErr != nil {
+			log.Println("error marshalling failed: ", marshallErr)
+		}
+
+		err := c.WriteMessage(appErr.Status, errMsg)
 		if err != nil {
 			log.Printf("failed to write error response: %v", err)
 		}
 	} else {
 		slog.Error("WS error", "errMsg", appErr.Error(), "status", websocket.TextMessage, "err", "something went wrong")
-		err := c.WriteMessage(websocket.TextMessage, []byte("something went wrong"))
+
+		errMsg, marshallErr := json.Marshal(fiber.Map{
+			"errMsg": "something went wrong",
+		})
+		if marshallErr != nil {
+			log.Println("error marshalling failed: ", marshallErr)
+		}
+
+		err := c.WriteMessage(websocket.TextMessage, errMsg)
 		if err != nil {
 			log.Printf("failed to write error response: %v", err)
 		}
@@ -71,6 +87,8 @@ func MakeWebsocketHandler(h WebsocketFunc) fiber.Handler {
 				if err := h(conn); err != nil {
 					writeErrorResponse(conn, err)
 				}
+			}, websocket.Config{
+				Origins: []string{"http://localhost:5173"},
 			})(c)
 		}
 		return fiber.ErrUpgradeRequired

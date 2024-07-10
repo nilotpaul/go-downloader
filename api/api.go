@@ -42,7 +42,7 @@ func (s *APIServer) Start() error {
 	app.Use(logger)
 	app.Use(cors.New(cors.Config{
 		AllowCredentials: true,
-		AllowOrigins:     "http://localhost:3000,http://127.0.0.1:7331",
+		AllowOrigins:     "http://localhost:5173",
 		AllowMethods:     "GET,POST",
 	}))
 
