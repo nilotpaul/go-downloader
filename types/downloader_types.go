@@ -14,6 +14,11 @@ type Progress struct {
 	Speed        float64   `json:"speed"`
 }
 
+type DownloadHRBody struct {
+	Links           string `json:"links"`
+	DestinationPath string `json:"path"`
+}
+
 type Downloader interface {
 	GetProgress(downloadingID string) (*Progress, error)
 	SetProgress(downloadingID string, prog *Progress) error

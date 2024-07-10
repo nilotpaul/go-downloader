@@ -5,3 +5,5 @@ bin
 .env.*
 media
 node_modules
+build
+dist

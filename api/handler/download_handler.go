@@ -30,19 +30,15 @@ func NewDownloadHandler(registry *store.ProviderRegistry, sessStore *session.Sto
 }
 
 func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
-	linksStr := c.Query("links", "")
-	destPath := c.Query("path", "")
-	if len(linksStr) == 0 {
-		return util.NewAppError(
-			http.StatusBadRequest,
-			"invalid link(s)",
-		)
+	b, err := util.ValidateDownloadHRBody(c)
+	if err != nil {
+		return err
 	}
-	if len(destPath) == 0 {
-		destPath = "./media"
+	if len(b.DestinationPath) == 0 {
+		b.DestinationPath = "./media"
 	}
 
-	fileIDs := util.GetFileIDs(linksStr)
+	fileIDs := util.GetFileIDs(b.Links)
 	if len(fileIDs) == 0 {
 		return util.NewAppError(
 			http.StatusBadRequest,
@@ -67,7 +63,7 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 	}
 
 	h.downloader.FileIds = fileIDs
-	h.downloader.DestinationPath = destPath
+	h.downloader.DestinationPath = b.DestinationPath
 	h.downloader.UserID = sess.UserID
 
 	slog.Info("downloading", "GDrive fileIDs: ", fileIDs)

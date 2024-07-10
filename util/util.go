@@ -88,7 +88,7 @@ func MakeWebsocketHandler(h WebsocketFunc) fiber.Handler {
 					writeErrorResponse(conn, err)
 				}
 			}, websocket.Config{
-				Origins: []string{"http://localhost:5173"},
+				Origins: []string{"http://localhost:5173", "http://localhost:3000"},
 			})(c)
 		}
 		return fiber.ErrUpgradeRequired

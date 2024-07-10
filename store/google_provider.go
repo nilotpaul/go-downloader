@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/nilotpaul/go-downloader/config"
@@ -31,7 +32,6 @@ type googleProviderConfig struct {
 var scopes = []string{
 	"https://www.googleapis.com/auth/drive.readonly",
 	"https://www.googleapis.com/auth/userinfo.email",
-	"openid",
 }
 
 func NewGoogleProvider(cfg googleProviderConfig, db *sql.DB, env config.EnvConfig) *GoogleProvider {
@@ -52,7 +52,7 @@ func NewGoogleProvider(cfg googleProviderConfig, db *sql.DB, env config.EnvConfi
 
 func (g *GoogleProvider) Authenticate(authCode string) error {
 	ctx := context.Background()
-	token, err := g.Config.Exchange(ctx, authCode)
+	token, err := g.Config.Exchange(ctx, authCode, oauth2.ApprovalForce)
 	if err != nil {
 		return util.NewAppError(
 			http.StatusInternalServerError,
@@ -97,7 +97,7 @@ func (g *GoogleProvider) IsTokenValid() bool {
 	return g.Token.Valid()
 }
 
-func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string) (*oauth2.Token, error) {
+func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string, force bool) (*oauth2.Token, error) {
 	ctx := context.Background()
 	if g.Token == nil {
 		return nil, util.NewAppError(
@@ -106,7 +106,9 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string) (*oauth2.Toke
 			"NewGoogleProvider, RefreshToken() error",
 		)
 	}
-
+	if force {
+		g.Token.Expiry = time.Now().AddDate(-100, 0, 0)
+	}
 	tokenSrc := g.Config.TokenSource(ctx, g.Token)
 	if tokenSrc == nil {
 		return nil, util.NewAppError(
@@ -115,7 +117,6 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string) (*oauth2.Toke
 			"NewGoogleProvider, RefreshToken() error",
 		)
 	}
-
 	newToken, err := tokenSrc.Token()
 	if err != nil {
 		return nil, util.NewAppError(
@@ -146,7 +147,7 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string) (*oauth2.Toke
 }
 
 func (g *GoogleProvider) GetAuthURL(state string) string {
-	return g.Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	return g.Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
 
 func (g *GoogleProvider) CreateOrUpdateAccount() (string, error) {

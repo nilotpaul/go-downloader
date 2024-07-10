@@ -14,19 +14,24 @@ import (
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
+type buildFunc func() http.Handler
+
 type APIServer struct {
 	listenAddr string
 	env        config.EnvConfig
 	registry   *store.ProviderRegistry
 	db         *sql.DB
+
+	buildFunc buildFunc
 }
 
-func NewAPIServer(listenAddr string, env config.EnvConfig, registry *store.ProviderRegistry, db *sql.DB) *APIServer {
+func NewAPIServer(listenAddr string, env config.EnvConfig, registry *store.ProviderRegistry, db *sql.DB, build buildFunc) *APIServer {
 	return &APIServer{
 		listenAddr: listenAddr,
 		env:        env,
 		registry:   registry,
 		db:         db,
+		buildFunc:  build,
 	}
 }
 

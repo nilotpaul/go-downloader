@@ -3,11 +3,14 @@ package util
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/gofiber/fiber/v2"
+	"github.com/nilotpaul/go-downloader/types"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v2"
 	"google.golang.org/api/option"
@@ -36,6 +39,19 @@ func SanitizeFileName(fileName string) string {
 	}
 
 	return newFileName
+}
+
+func SanitizeFolderPath(folderPath string) (string, bool) {
+	// Replace any invalid characters with an underscore
+	invalidCharsRegex := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+	sanitizedPath := invalidCharsRegex.ReplaceAllString(folderPath, "_")
+
+	wasValid := false
+	if folderPath == sanitizedPath {
+		wasValid = true
+	}
+
+	return sanitizedPath, wasValid
 }
 
 func MakeGDriveService(accToken string) (*drive.Service, error) {
@@ -135,4 +151,31 @@ func FormatBytes(bytes int64) string {
 	}
 
 	return fmt.Sprintf("%.2f %s", size, unit)
+}
+
+func ValidateDownloadHRBody(c *fiber.Ctx) (*types.DownloadHRBody, error) {
+	var body types.DownloadHRBody
+	if err := c.BodyParser(&body); err != nil {
+		return nil, NewAppError(
+			http.StatusUnprocessableEntity,
+			"failed to parse the response body",
+			err,
+		)
+	}
+
+	_, valid := SanitizeFolderPath(body.DestinationPath)
+	if len(body.DestinationPath) != 0 && !valid {
+		return nil, NewAppError(
+			http.StatusUnprocessableEntity,
+			"invalid folder path",
+		)
+	}
+	if len(body.Links) == 0 {
+		return nil, NewAppError(
+			http.StatusUnprocessableEntity,
+			"invalid link(s)",
+		)
+	}
+
+	return &body, nil
 }

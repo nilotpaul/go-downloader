@@ -23,7 +23,7 @@ func main() {
 	r := store.InitStore(*env, db)
 
 	// Fiber API server
-	s := api.NewAPIServer(env.Port, *env, r, db)
+	s := api.NewAPIServer(env.Port, *env, r, db, build)
 
 	// All routes, handlers & middlewares are registered
 	// in func Start().

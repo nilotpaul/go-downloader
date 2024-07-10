@@ -4,7 +4,7 @@ run: build
 	@./bin/go-downloader
 	
 build:
-	@go build -o bin/go-downloader
+	@go build -tags '!dev' -o bin/go-downloader
 
 test:
 	@go test -v ../...

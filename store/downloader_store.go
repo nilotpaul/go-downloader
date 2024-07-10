@@ -137,6 +137,7 @@ func (d *Downloader) cleanUp(fileID string, progChan chan *types.Progress) {
 	d.pendingDownloadsMu.Unlock()
 
 	close(progChan)
+	delete(d.progressChans, fileID)
 	close(d.ErrChans[fileID])
 	delete(d.ErrChans, fileID)
 }

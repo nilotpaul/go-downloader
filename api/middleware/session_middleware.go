@@ -40,7 +40,7 @@ func init() {
 
 // SessionMiddleware will check the validity of AccessToken token,
 // if it's invalid it'll refresh the token and return the new credentials.
-// Values are created and updated in order to maintain the synchronicity.
+// values are created and updated in order to maintain the synchronicity.
 func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 	gp, err := m.registry.GetProvider(setting.GoogleProvider)
 	if err != nil {
@@ -60,7 +60,7 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 		slog.Error("SessionMiddleware", "error", "token length 0")
 		return c.Next()
 	}
-	// Verifies and extracts the UserID from JWT Token.
+	// verifies and extracts the UserID from JWT Token.
 	decoded, err := util.VerifyAndDecodeSessionToken(token, m.env.SessionSecret)
 	if err != nil {
 		m.resetPersistingSession(c, gp)
@@ -104,7 +104,7 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 	// If token has expired or is invalid, RefreshToken will generate a new
 	// AccessToken and update the user account in database.
 	if !gp.IsTokenValid() {
-		t, err := gp.RefreshToken(c, session.UserID)
+		t, err := gp.RefreshToken(c, session.UserID, false)
 		if err != nil {
 			m.resetPersistingSession(c, gp)
 			return util.NewAppError(

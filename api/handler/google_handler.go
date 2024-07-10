@@ -128,3 +128,51 @@ func (h *GoogleHandler) LogoutHandler(c *fiber.Ctx) error {
 
 	return c.JSON("OK")
 }
+
+func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
+	gp, err := h.registry.GetProvider(setting.GoogleProvider)
+	if err != nil {
+		return util.NewAppError(
+			http.StatusNotFound,
+			"no provider found",
+			err,
+		)
+	}
+	sess, err := util.GetSessionFromStore(c, h.sessStore)
+	if err != nil {
+		return util.NewAppError(
+			http.StatusInternalServerError,
+			"failed to retrieve session from store",
+			err,
+		)
+	}
+
+	t, err := gp.RefreshToken(c, sess.UserID, true)
+	if err != nil {
+		return err
+	}
+
+	sess.AccessToken = t.AccessToken
+	sess.RefreshToken = t.RefreshToken
+	sess.TokenType = t.TokenType
+	sess.ExpiresAt = t.Expiry
+
+	if err := gp.UpdateTokens(sess); err != nil {
+		return util.NewAppError(
+			http.StatusInternalServerError,
+			"failed to update the tokens",
+			err,
+		)
+	}
+	if err := util.SetSessionInStore(c, h.sessStore, sess); err != nil {
+		return util.NewAppError(
+			http.StatusInternalServerError,
+			"failed to set the session in store",
+			err,
+		)
+	}
+
+	c.Locals(setting.LocalSessionKey, sess.UserID)
+
+	return c.JSON("OK")
+}
