@@ -78,7 +78,7 @@ func writeErrorResponse(c *websocket.Conn, err error) {
 
 // MakeWebsocketHandler creates a Fiber handler that wraps
 // a WebSocket handler function.
-func MakeWebsocketHandler(h WebsocketFunc) fiber.Handler {
+func MakeWebsocketHandler(h WebsocketFunc, appURL string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			return websocket.New(func(conn *websocket.Conn) {
@@ -88,7 +88,7 @@ func MakeWebsocketHandler(h WebsocketFunc) fiber.Handler {
 					writeErrorResponse(conn, err)
 				}
 			}, websocket.Config{
-				Origins: []string{"http://localhost:5173", "http://localhost:3000"},
+				Origins: []string{"http://localhost:5173", "http://localhost:3000", appURL},
 			})(c)
 		}
 		return fiber.ErrUpgradeRequired

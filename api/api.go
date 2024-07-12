@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -14,15 +15,14 @@ import (
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
-type buildFunc func() http.Handler
+type buildFunc func() fiber.Handler
 
 type APIServer struct {
 	listenAddr string
 	env        config.EnvConfig
 	registry   *store.ProviderRegistry
 	db         *sql.DB
-
-	buildFunc buildFunc
+	build      buildFunc
 }
 
 func NewAPIServer(listenAddr string, env config.EnvConfig, registry *store.ProviderRegistry, db *sql.DB, build buildFunc) *APIServer {
@@ -31,7 +31,7 @@ func NewAPIServer(listenAddr string, env config.EnvConfig, registry *store.Provi
 		env:        env,
 		registry:   registry,
 		db:         db,
-		buildFunc:  build,
+		build:      build,
 	}
 }
 
@@ -47,7 +47,7 @@ func (s *APIServer) Start() error {
 	app.Use(logger)
 	app.Use(cors.New(cors.Config{
 		AllowCredentials: true,
-		AllowOrigins:     "http://localhost:5173",
+		AllowOrigins:     fmt.Sprintf("http://localhost:5173,%s", s.env.AppURL),
 		AllowMethods:     "GET,POST",
 	}))
 
@@ -55,6 +55,9 @@ func (s *APIServer) Start() error {
 
 	handler := NewRouter(s.registry, s.env, s.db)
 	handler.RegisterRoutes(v1)
+
+	// static build folder for production usage.
+	app.Use("/", s.build())
 
 	log.Printf("Server started on http://localhost:%s", s.listenAddr)
 

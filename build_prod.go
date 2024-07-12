@@ -4,29 +4,41 @@
 package main
 
 import (
+	"embed"
+	"fmt"
+	"io/fs"
+	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"strings"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 )
 
-func build() http.Handler {
-	distDir := "./dist"
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the absolute path to prevent directory traversal
-		absPath, err := filepath.Abs(filepath.Join(distDir, r.URL.Path))
-		if err != nil {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
-			return
-		}
+//go:embed dist/*
+var dist embed.FS
 
-		// Check if the file exists
-		if _, err := os.Stat(absPath); err != nil {
-			// Serve the index.html file
-			http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
-			return
-		}
+func build() fiber.Handler {
+	dist, err := fs.Sub(dist, "dist")
+	if err != nil {
+		log.Fatalf("Failed to get sub filesystem: %v", err)
+	}
 
-		// Otherwise, serve the static file
-		http.FileServer(http.Dir(distDir)).ServeHTTP(w, r)
+	fileServer := filesystem.New(filesystem.Config{
+		Root:   http.FS(dist),
+		Browse: true,
 	})
+
+	return func(c *fiber.Ctx) error {
+		path := strings.TrimPrefix(c.Path(), "/")
+		_, err := fs.Stat(dist, path)
+		if os.IsNotExist(err) {
+			// If the requested file doesn't exist, serve index.html.
+			// These paths will be handled by client-side router.
+			fmt.Println("serving index.html")
+			return c.SendFile("dist/index.html")
+		}
+		return fileServer(c)
+	}
 }

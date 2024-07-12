@@ -222,7 +222,7 @@ func (g *GoogleProvider) CreateSession(c *fiber.Ctx, userID string) error {
 		)
 	}
 
-	util.SetSessionToken(c, token)
+	util.SetSessionToken(c, token, g.env.Domain)
 
 	return nil
 }

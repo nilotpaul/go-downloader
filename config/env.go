@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/nilotpaul/go-downloader/util"
 )
 
 type EnvConfig struct {
@@ -13,18 +14,18 @@ type EnvConfig struct {
 	AppURL             string `envconfig:"APP_URL"`
 	DBURL              string `envconfig:"DB_URL"`
 	SessionSecret      string `envconfig:"SESSION_SECRET"`
+	Domain             string `envconfig:"DOMAIN"`
 }
 
 func loadEnv() (*EnvConfig, error) {
 	var cfg EnvConfig
 
-	err := godotenv.Load()
-	if err != nil {
-		return nil, err
+	if !util.IsProduction() {
+		if err := godotenv.Load(); err != nil {
+			return nil, err
+		}
 	}
-
-	err = envconfig.Process("", &cfg)
-	if err != nil {
+	if err := envconfig.Process("", &cfg); err != nil {
 		return nil, err
 	}
 

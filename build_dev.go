@@ -3,10 +3,10 @@
 
 package main
 
-import (
-	"net/http"
-)
+import "github.com/gofiber/fiber/v2"
 
-func build() http.Handler {
-	return http.NotFoundHandler()
+func build() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		return c.Next()
+	}
 }

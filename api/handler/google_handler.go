@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/nilotpaul/go-downloader/config"
 	"github.com/nilotpaul/go-downloader/service"
 	"github.com/nilotpaul/go-downloader/setting"
 	"github.com/nilotpaul/go-downloader/store"
@@ -16,13 +17,15 @@ type GoogleHandler struct {
 	registry  *store.ProviderRegistry
 	sessStore *session.Store
 	db        *sql.DB
+	env       config.EnvConfig
 }
 
-func NewGoogleHandler(registry *store.ProviderRegistry, sessStore *session.Store, db *sql.DB) *GoogleHandler {
+func NewGoogleHandler(registry *store.ProviderRegistry, sessStore *session.Store, db *sql.DB, env config.EnvConfig) *GoogleHandler {
 	return &GoogleHandler{
 		registry:  registry,
 		sessStore: sessStore,
 		db:        db,
+		env:       env,
 	}
 }
 
@@ -118,7 +121,7 @@ func (h *GoogleHandler) LogoutHandler(c *fiber.Ctx) error {
 			"no provider found",
 		)
 	}
-	err = util.ResetSession(c, r)
+	err = util.ResetSession(c, r, h.env.Domain)
 	if err != nil {
 		util.NewAppError(
 			http.StatusNotFound,
@@ -141,8 +144,8 @@ func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 	sess, err := util.GetSessionFromStore(c, h.sessStore)
 	if err != nil {
 		return util.NewAppError(
-			http.StatusInternalServerError,
-			"failed to retrieve session from store",
+			http.StatusUnauthorized,
+			"no session found",
 			err,
 		)
 	}

@@ -26,7 +26,7 @@ func initDB(DBURL string) (*sql.DB, error) {
 func MustInitDB(DBURL string) *sql.DB {
 	db, err := initDB(DBURL)
 	if err != nil {
-		panic(fmt.Sprintf("failed to connect to DB:  ", err))
+		panic(fmt.Sprintf("failed to connect to DB: %s", err))
 	}
 
 	return db

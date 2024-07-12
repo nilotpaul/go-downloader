@@ -56,7 +56,6 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 	// which contains the UserID and JWT Expiry.
 	token := util.GetSessionToken(c)
 	if len(token) == 0 {
-		m.resetPersistingSession(c, gp)
 		slog.Error("SessionMiddleware", "error", "token length 0")
 		return c.Next()
 	}

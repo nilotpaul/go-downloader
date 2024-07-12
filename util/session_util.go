@@ -25,16 +25,15 @@ func GenerateSessionToken(userID string, secret string) (string, error) {
 	return ts, nil
 }
 
-func SetSessionToken(c *fiber.Ctx, token string) {
-	isProd := IsProduction()
-
+func SetSessionToken(c *fiber.Ctx, token string, domain string) {
 	c.Cookie(&fiber.Cookie{
 		Name:     setting.SessionKey,
 		Value:    token,
 		Expires:  setting.SessionExpiry,
 		HTTPOnly: true,
 		Path:     "/",
-		Secure:   isProd,
+		Secure:   false,
+		Domain:   domain,
 	})
 }
 
@@ -49,6 +48,7 @@ func VerifyAndDecodeSessionToken(tokenStr string, secret string) (*types.JWTSess
 		}
 		return []byte(secret), nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -112,18 +112,20 @@ func SetSessionInStore(c *fiber.Ctx, store *session.Store, acc *types.GoogleAcco
 	return nil
 }
 
-func ResetSession(c *fiber.Ctx, r types.OAuthProvider) error {
+func ResetSession(c *fiber.Ctx, r types.OAuthProvider, domain string) error {
 	c.Cookie(&fiber.Cookie{
 		Name:     setting.SessionKey,
 		Path:     "/",
 		HTTPOnly: true,
 		Expires:  time.Now().AddDate(-100, 0, 0),
+		Domain:   domain,
 	})
 	// clears the in memory session id cookie.
 	c.Cookie(&fiber.Cookie{
 		Name:     "session_id",
 		HTTPOnly: true,
 		Expires:  time.Now().AddDate(-100, 0, 0),
+		Domain:   domain,
 	})
 	return r.UpdateTokens(nil)
 }

@@ -57,8 +57,8 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 	sess, err := util.GetSessionFromStore(c, h.sessStore)
 	if err != nil {
 		return util.NewAppError(
-			http.StatusInternalServerError,
-			"failed to get the session from store",
+			http.StatusUnauthorized,
+			"no session found",
 		)
 	}
 
@@ -80,15 +80,15 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 }
 
 func (h *DownloadHandler) ProgressHTTPHandler(c *fiber.Ctx) error {
-	sess, err := util.GetSessionFromStore(c, h.sessStore)
-	if err != nil {
+	userID := c.Locals(setting.LocalSessionKey, "").(string)
+	if len(userID) == 0 {
 		return util.NewAppError(
 			http.StatusNotFound,
-			"failed to retrieve session from store",
+			"no session found",
 		)
 	}
 
-	pendings, _ := h.downloader.GetPendingDownloads(sess.UserID)
+	pendings, _ := h.downloader.GetPendingDownloads(userID)
 	if len(pendings) == 0 {
 		return util.NewAppError(
 			http.StatusNotFound,
