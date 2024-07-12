@@ -80,7 +80,14 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 }
 
 func (h *DownloadHandler) ProgressHTTPHandler(c *fiber.Ctx) error {
-	userID := c.Locals(setting.LocalSessionKey, "").(string)
+	userID, ok := c.Locals(setting.LocalSessionKey).(string)
+	if !ok {
+		log.Println("invalid session type: ", userID)
+		return util.NewAppError(
+			http.StatusNotFound,
+			"no session found",
+		)
+	}
 	if len(userID) == 0 {
 		return util.NewAppError(
 			http.StatusNotFound,

@@ -197,4 +197,5 @@ func (m *SessionMiddleware) resetPersistingSession(c *fiber.Ctx, gp types.OAuthP
 	if err := util.SetSessionInStore(c, m.sessStore, nil); err != nil {
 		log.Error("failed reseting session(SetSessionInStore): ", err)
 	}
+	c.Locals(setting.LocalSessionKey, "")
 }

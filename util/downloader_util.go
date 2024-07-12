@@ -41,16 +41,12 @@ func SanitizeFileName(fileName string) string {
 	return newFileName
 }
 
-func SanitizeFolderPath(folderPath string) (string, bool) {
+func sanitizeFolderPath(folderPath string) (string, bool) {
 	// Replace any invalid characters with an underscore
-	invalidCharsRegex := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+	invalidCharsRegex := regexp.MustCompile(`[<>:"\\|?*\x00-\x1F]`)
 	sanitizedPath := invalidCharsRegex.ReplaceAllString(folderPath, "_")
 
-	wasValid := false
-	if folderPath == sanitizedPath {
-		wasValid = true
-	}
-
+	wasValid := folderPath == sanitizedPath
 	return sanitizedPath, wasValid
 }
 
@@ -163,16 +159,16 @@ func ValidateDownloadHRBody(c *fiber.Ctx) (*types.DownloadHRBody, error) {
 		)
 	}
 
-	_, valid := SanitizeFolderPath(body.DestinationPath)
+	_, valid := sanitizeFolderPath(body.DestinationPath)
 	if len(body.DestinationPath) != 0 && !valid {
 		return nil, NewAppError(
-			http.StatusUnprocessableEntity,
+			http.StatusBadRequest,
 			"invalid folder path",
 		)
 	}
 	if len(body.Links) == 0 {
 		return nil, NewAppError(
-			http.StatusUnprocessableEntity,
+			http.StatusBadRequest,
 			"invalid link(s)",
 		)
 	}
