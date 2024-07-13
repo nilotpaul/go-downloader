@@ -68,13 +68,19 @@ func MakeGDriveService(accToken string) (*drive.Service, error) {
 func CreateFile(path string) (*os.File, error) {
 	dir, file := filepath.Split(path)
 
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		return nil, err
+	if err := os.MkdirAll(dir, os.ModeDir|os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create the directories: %v", err)
 	}
 
 	f, err := os.Create(filepath.Join(dir, file))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create the file: %v", err)
+	}
+	if err := os.Chmod(dir, os.ModeDir|os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to set directory permissions: %v", err)
+	}
+	if err := f.Chmod(os.FileMode(0664)); err != nil {
+		return nil, fmt.Errorf("failed to set file permissions: %v", err)
 	}
 
 	return f, nil

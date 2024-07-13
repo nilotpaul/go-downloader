@@ -123,7 +123,7 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string, force bool) (
 			http.StatusInternalServerError,
 			"failed to generate refresh token",
 			"NewGoogleProvider, RefreshToken() error: ",
-			err,
+			err.Error(),
 		)
 	}
 

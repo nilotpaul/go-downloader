@@ -3,7 +3,6 @@ package middleware
 import (
 	"database/sql"
 	"encoding/gob"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -93,12 +92,7 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 	// so that it can be used to refresh the token later.
 	if err := gp.UpdateTokens(session); err != nil {
 		m.resetPersistingSession(c, gp)
-		return util.NewAppError(
-			http.StatusInternalServerError,
-			fmt.Errorf("failed to update the tokens: %s", err.Error()).Error(),
-			"SessionMiddleware error: ",
-			err,
-		)
+		return err
 	}
 	// If token has expired or is invalid, RefreshToken will generate a new
 	// AccessToken and update the user account in database.
@@ -106,12 +100,7 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 		t, err := gp.RefreshToken(c, session.UserID, false)
 		if err != nil {
 			m.resetPersistingSession(c, gp)
-			return util.NewAppError(
-				http.StatusInternalServerError,
-				fmt.Sprintf("failed to refresh the token: %s", err.Error()),
-				"SessionMiddleware error: ",
-				err,
-			)
+			return err
 		}
 
 		session.AccessToken = t.AccessToken
@@ -123,22 +112,12 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 	// Injecting provider with the new tokens,
 	if err := gp.UpdateTokens(session); err != nil {
 		m.resetPersistingSession(c, gp)
-		return util.NewAppError(
-			http.StatusInternalServerError,
-			"failed to update the tokens",
-			"SessionMiddleware error: ",
-			err,
-		)
+		return err
 	}
 	// Setting the session in the in memory session store.
 	if err := util.SetSessionInStore(c, m.sessStore, session); err != nil {
 		m.resetPersistingSession(c, gp)
-		return util.NewAppError(
-			http.StatusInternalServerError,
-			"failed to set the session in store",
-			"SessionMiddleware error: ",
-			err,
-		)
+		return err
 	}
 
 	// Set the UserID in the request, already done in Session Storage

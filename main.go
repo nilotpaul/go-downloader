@@ -6,23 +6,33 @@ import (
 	"github.com/nilotpaul/go-downloader/api"
 	"github.com/nilotpaul/go-downloader/config"
 	"github.com/nilotpaul/go-downloader/store"
+	"github.com/nilotpaul/go-downloader/util"
+	"github.com/pressly/goose/v3"
 )
 
 func main() {
 	// Loads all Env vars from .env file.
-	// Will panic if there's an error.
 	env := config.MustLoadEnv()
 
 	// Initializes and connects to DB.
-	// Will panic if there's an error.
 	db := config.MustInitDB(env.DBURL)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("error closing the database connection: %s", err)
+		}
+	}()
+
+	// Run auto migrations in production.
+	if util.IsProduction() {
+		if err := goose.Up(db, "./migrations"); err != nil {
+			log.Fatalf("failed to apply database migrations: %v", err)
+		}
+	}
 
 	// Initializes the provider registry where all the
 	// auth providers are registered.
 	r := store.InitStore(*env, db)
 
-	// Fiber API server
 	s := api.NewAPIServer(env.Port, *env, r, db, build)
 
 	// All routes, handlers & middlewares are registered
