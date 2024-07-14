@@ -39,6 +39,8 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /root/
 
+ENV ENVIRONMENT="PROD"
+
 # Copying the dist and go binary from previous stages
 COPY --from=server-builder /app/bin ./bin
 COPY --from=server-builder /app/dist ./dist

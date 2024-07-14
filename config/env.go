@@ -7,14 +7,15 @@ import (
 )
 
 type EnvConfig struct {
-	Environment        string `envconfig:"ENVIRONMENT"`
-	Port               string `envconfig:"PORT"`
-	GoogleClientID     string `envconfig:"GOOGLE_CLIENT_ID"`
-	GoogleClientSecret string `envconfig:"GOOGLE_CLIENT_SECRET"`
-	AppURL             string `envconfig:"APP_URL"`
-	DBURL              string `envconfig:"DB_URL"`
-	SessionSecret      string `envconfig:"SESSION_SECRET"`
-	Domain             string `envconfig:"DOMAIN"`
+	Environment         string `envconfig:"ENVIRONMENT"`
+	Port                string `envconfig:"PORT"`
+	GoogleClientID      string `envconfig:"GOOGLE_CLIENT_ID"`
+	GoogleClientSecret  string `envconfig:"GOOGLE_CLIENT_SECRET"`
+	AppURL              string `envconfig:"APP_URL"`
+	DBURL               string `envconfig:"DB_URL"`
+	SessionSecret       string `envconfig:"SESSION_SECRET"`
+	Domain              string `envconfig:"DOMAIN"`
+	DefaultDownloadPath string `envconfig:"DEFAULT_DOWNLOAD_PATH"`
 }
 
 func loadEnv() (*EnvConfig, error) {

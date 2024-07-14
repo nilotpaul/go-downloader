@@ -48,26 +48,18 @@ func (d *Downloader) StartDownload(accToken string, fileName string) error {
 				AccessToken:     accToken,
 			}, progChan)
 			if err != nil {
-				log.Errorf("error downloading file %s: %v\n ", fileID, err)
+				log.Errorf("error downloading file %s: %v\n", fileID, err)
 				errChan <- err
-
-				d.cleanUp(fileID, progChan)
-				return
 			}
+
+			d.cleanUp(fileID)
 		}(fileID)
 	}
 
 	for fileID, progChan := range d.progressChans {
 		go func(fileID string, progChan chan *types.Progress) {
 			for prog := range progChan {
-				d.pendingDownloadsMu.Lock()
-				d.PendingDownloads[fileID] = prog
-				d.pendingDownloadsMu.Unlock()
-
-				if prog.Complete {
-					d.cleanUp(fileID, progChan)
-					break
-				}
+				d.SetProgress(fileID, prog)
 			}
 		}(fileID, progChan)
 	}
@@ -131,13 +123,14 @@ func (d *Downloader) DeleteProgress(fileID string) {
 	delete(d.PendingDownloads, fileID)
 }
 
-func (d *Downloader) cleanUp(fileID string, progChan chan *types.Progress) {
+func (d *Downloader) cleanUp(fileID string) {
+	close(d.progressChans[fileID])
+	close(d.ErrChans[fileID])
+
+	delete(d.progressChans, fileID)
+	delete(d.ErrChans, fileID)
+
 	d.pendingDownloadsMu.Lock()
 	delete(d.PendingDownloads, fileID)
 	d.pendingDownloadsMu.Unlock()
-
-	close(progChan)
-	delete(d.progressChans, fileID)
-	close(d.ErrChans[fileID])
-	delete(d.ErrChans, fileID)
 }

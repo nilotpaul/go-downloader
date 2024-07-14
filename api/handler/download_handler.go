@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/nilotpaul/go-downloader/config"
 	"github.com/nilotpaul/go-downloader/setting"
 	"github.com/nilotpaul/go-downloader/store"
 	"github.com/nilotpaul/go-downloader/util"
@@ -19,12 +20,14 @@ type DownloadHandler struct {
 	registry   *store.ProviderRegistry
 	downloader *store.Downloader
 	sessStore  *session.Store
+	env        config.EnvConfig
 }
 
-func NewDownloadHandler(registry *store.ProviderRegistry, sessStore *session.Store) *DownloadHandler {
+func NewDownloadHandler(registry *store.ProviderRegistry, sessStore *session.Store, env config.EnvConfig) *DownloadHandler {
 	return &DownloadHandler{
 		registry:   registry,
 		sessStore:  sessStore,
+		env:        env,
 		downloader: store.NewDownloader(make([]string, 0), ""),
 	}
 }
@@ -35,7 +38,7 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 		return err
 	}
 	if len(b.DestinationPath) == 0 {
-		b.DestinationPath = "./media"
+		b.DestinationPath = h.env.DefaultDownloadPath
 	}
 
 	fileIDs := util.GetFileIDs(b.Links)
@@ -43,6 +46,12 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 		return util.NewAppError(
 			http.StatusBadRequest,
 			"invalid link(s)",
+		)
+	}
+	if util.HasDuplicates(fileIDs) {
+		return util.NewAppError(
+			http.StatusBadRequest,
+			"duplicate links found",
 		)
 	}
 

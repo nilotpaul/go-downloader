@@ -39,6 +39,50 @@ func DecodeJSON(r io.Reader, target interface{}) error {
 	return nil
 }
 
+// MakeWebsocketHandler creates a Fiber handler that wraps
+// a WebSocket handler function.
+func MakeWebsocketHandler(h WebsocketFunc, appURL string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			return websocket.New(func(conn *websocket.Conn) {
+				log.Println("new incoming ws connection", conn.NetConn().RemoteAddr())
+
+				if err := h(conn); err != nil {
+					writeErrorResponse(conn, err)
+				}
+			}, websocket.Config{
+				Origins: []string{"http://localhost:5173", "http://localhost:3000", appURL},
+			})(c)
+		}
+		return fiber.ErrUpgradeRequired
+	}
+}
+
+func CommitOrRollback(tx *sql.Tx, err *error) {
+	if *err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			*err = rbErr
+		}
+	} else {
+		*err = tx.Commit()
+	}
+}
+
+func HasDuplicates(ids []string) bool {
+	idMap := make(map[string]struct{})
+	for _, id := range ids {
+		if _, exists := idMap[id]; exists {
+			return true
+		}
+		idMap[id] = struct{}{}
+	}
+	return false
+}
+
+func MakeURL(url string) string {
+	return setting.APIPrefix + url
+}
+
 // writeErrorResponse writes an error response to the WebSocket connection.
 func writeErrorResponse(c *websocket.Conn, err error) {
 	if appErr, ok := err.(*AppError); ok {
@@ -74,37 +118,4 @@ func writeErrorResponse(c *websocket.Conn, err error) {
 	if err := c.Close(); err != nil {
 		log.Printf("failed to close the ws connection: %v", err)
 	}
-}
-
-// MakeWebsocketHandler creates a Fiber handler that wraps
-// a WebSocket handler function.
-func MakeWebsocketHandler(h WebsocketFunc, appURL string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		if websocket.IsWebSocketUpgrade(c) {
-			return websocket.New(func(conn *websocket.Conn) {
-				log.Println("new incoming ws connection", conn.NetConn().RemoteAddr())
-
-				if err := h(conn); err != nil {
-					writeErrorResponse(conn, err)
-				}
-			}, websocket.Config{
-				Origins: []string{"http://localhost:5173", "http://localhost:3000", appURL},
-			})(c)
-		}
-		return fiber.ErrUpgradeRequired
-	}
-}
-
-func CommitOrRollback(tx *sql.Tx, err *error) {
-	if *err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			*err = rbErr
-		}
-	} else {
-		*err = tx.Commit()
-	}
-}
-
-func MakeURL(url string) string {
-	return setting.APIPrefix + url
 }

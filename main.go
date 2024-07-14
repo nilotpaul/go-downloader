@@ -18,7 +18,7 @@ func main() {
 	db := config.MustInitDB(env.DBURL)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Printf("error closing the database connection: %s", err)
+			log.Printf("error closing the database connection: %v", err)
 		}
 	}()
 

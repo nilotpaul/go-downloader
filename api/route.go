@@ -49,7 +49,7 @@ func (h *Router) RegisterRoutes(r fiber.Router) {
 	r.Post("/logout", sessionMW.WithGoogleOAuth, googleHR.LogoutHandler)
 	r.Get("/callback/google", sessionMW.WithoutGoogleOAuth, googleHR.GoogleCallbackHandler)
 
-	downloadHR := handler.NewDownloadHandler(h.registry, h.sessStore)
+	downloadHR := handler.NewDownloadHandler(h.registry, h.sessStore, h.env)
 
 	// For now this download route will only support GDrive, later multiple providers
 	// will be handled here.
