@@ -35,6 +35,9 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %v", err.Error())
 	}
+	// if file.MimeType != "application/vnd.google-apps.file" {
+	// 	return fmt.Errorf("expected file, got a folder. downloading a folder is not supported yet")
+	// }
 	if len(cfg.FileName) == 0 {
 		cfg.FileName = file.OriginalFilename
 	}
