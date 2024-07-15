@@ -103,7 +103,7 @@ NOTE: **To make this work, you'll need a top-level domain or use it from your lo
 ### With Docker CLI
 
 **FOR DOWNLOADER**
-
+```bash
 docker run -d \
  --name go_downloader \
  -p 3000:3000 \
@@ -120,9 +120,10 @@ docker run -d \
  -v /media:/media \
  --restart unless-stopped \
  ghcr.io/nilotpaul/go-downloader:1.0.0
+```
 
 **FOR POSTGRES DB**
-
+```bash
 docker run -d \
  --name go_downloader_pg_db \
  --network go_downloader_network \
@@ -132,6 +133,7 @@ docker run -d \
  -v go_downloader_pg_data:/var/lib/postgresql/data \
  --restart unless-stopped \
  postgres:latest
+```
 
 ## Notes
 
