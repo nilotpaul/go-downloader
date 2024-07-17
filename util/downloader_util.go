@@ -50,14 +50,14 @@ func sanitizeFolderPath(folderPath string) (string, bool) {
 	return sanitizedPath, wasValid
 }
 
-func MakeGDriveService(accToken string) (*drive.Service, error) {
+func MakeGDriveService(ctx context.Context, accToken string) (*drive.Service, error) {
 	token := &oauth2.Token{
 		AccessToken: accToken,
 	}
 	ts := oauth2.StaticTokenSource(token)
-	client := oauth2.NewClient(context.Background(), ts)
+	client := oauth2.NewClient(ctx, ts)
 
-	srv, err := drive.NewService(context.Background(), option.WithHTTPClient(client))
+	srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return nil, err
 	}
@@ -86,37 +86,87 @@ func CreateFile(path string) (*os.File, error) {
 	return f, nil
 }
 
-func GetGDriveFileID(url string) string {
+// GetGDriveFileID will extract the fileIDs from the url or link.
+// The bool will return true for a file and vise-versa for a folder.
+func GetGDriveFileID(url string) (string, bool) {
 	var fileID string
-	exp1 := regexp.MustCompile(`drive\.google\.com\/open\?id\=(.*)`)
-	exp2 := regexp.MustCompile(`drive\.google\.com\/file\/d\/(.*?)\/`)
-	exp3 := regexp.MustCompile(`drive\.google\.com\/uc\?id\=(.*?)\&`)
+	var isFile bool
 
-	if matches := exp1.FindStringSubmatch(url); len(matches) > 1 {
+	// for files
+	expFile1 := regexp.MustCompile(`drive\.google\.com\/open\?id\=(.*)`)
+	expFile2 := regexp.MustCompile(`drive\.google\.com\/file\/d\/(.*?)\/`)
+	expFile3 := regexp.MustCompile(`drive\.google\.com\/uc\?id\=(.*?)\&`)
+
+	// for folders
+	expFolder1 := regexp.MustCompile(`drive\.google\.com\/drive\/folders\/(.*?)\?`)
+	expFolder2 := regexp.MustCompile(`drive\.google\.com\/drive\/u\/\d+\/folders\/(.*?)\?`)
+	expFolder3 := regexp.MustCompile(`drive\.google\.com\/folderview\?id\=(.*?)\&`)
+
+	if matches := expFile1.FindStringSubmatch(url); len(matches) > 1 {
 		fileID = matches[1]
-	} else if matches := exp2.FindStringSubmatch(url); len(matches) > 1 {
+		isFile = true
+	} else if matches := expFile2.FindStringSubmatch(url); len(matches) > 1 {
 		fileID = matches[1]
-	} else if matches := exp3.FindStringSubmatch(url); len(matches) > 1 {
+		isFile = true
+
+	} else if matches := expFile3.FindStringSubmatch(url); len(matches) > 1 {
 		fileID = matches[1]
+		isFile = true
+		// Check for folder IDs
+	} else if matches := expFolder1.FindStringSubmatch(url); len(matches) > 1 {
+		fileID = matches[1]
+		isFile = false
+	} else if matches := expFolder2.FindStringSubmatch(url); len(matches) > 1 {
+		fileID = matches[1]
+		isFile = false
+
+	} else if matches := expFolder3.FindStringSubmatch(url); len(matches) > 1 {
+		fileID = matches[1]
+		isFile = false
 	} else {
 		fileID = ""
 	}
 
-	return fileID
+	return fileID, isFile
 }
 
-func GetFileIDs(linksStr string) []string {
-	var fileIds []string
+func GetFileIDs(linksStr string) map[string][]string {
+	fileIds := make(map[string][]string)
 
 	links := strings.Split(linksStr, ",")
 	for _, link := range links {
-		fileID := GetGDriveFileID(link)
+		fileID, isFile := GetGDriveFileID(link)
 		if len(fileID) != 0 {
-			fileIds = append(fileIds, fileID)
+			if isFile {
+				fileIds["file"] = append(fileIds["file"], fileID)
+			} else {
+				fileIds["folder"] = append(fileIds["folder"], fileID)
+			}
 		}
 	}
 
 	return fileIds
+}
+
+func GetFileIDsFromFolder(srv *drive.Service, folderID string) ([]string, error) {
+	var folderIDs []string
+	query := fmt.Sprintf("'%s' in parents and trashed = false", folderID)
+	pageToken := ""
+	for {
+		r, err := srv.Files.List().Q(query).PageToken(pageToken).MaxResults(100).Fields("nextPageToken, items(id, title)").Do()
+		if err != nil {
+			return folderIDs, err
+		}
+		for _, file := range r.Items {
+			folderIDs = append(folderIDs, file.Id)
+		}
+		pageToken = r.NextPageToken
+		if len(pageToken) == 0 {
+			break
+		}
+	}
+
+	return folderIDs, nil
 }
 
 // FormatBytes returns a human-readable string representation
@@ -153,6 +203,26 @@ func FormatBytes(bytes int64) string {
 	}
 
 	return fmt.Sprintf("%.2f %s", size, unit)
+}
+
+func ValidateCancelDownloadHRBody(c *fiber.Ctx) (string, error) {
+	var body types.CancelDownloadHRBody
+	if err := c.BodyParser(&body); err != nil {
+		return "", NewAppError(
+			http.StatusUnprocessableEntity,
+			"failed to parse the response body",
+			err,
+		)
+	}
+
+	if len(body.FileID) == 0 {
+		return "", NewAppError(
+			http.StatusBadRequest,
+			"invalid fileID",
+		)
+	}
+
+	return body.FileID, nil
 }
 
 func ValidateDownloadHRBody(c *fiber.Ctx) (*types.DownloadHRBody, error) {

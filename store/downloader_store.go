@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -14,8 +15,8 @@ type Downloader struct {
 	ErrChans           map[string]chan error
 	FileIds            []string
 	DestinationPath    string
-	UserID             string
 	PendingDownloads   map[string]*types.Progress
+	cancelFuncs        map[string]context.CancelFunc
 	pendingDownloadsMu sync.RWMutex
 }
 
@@ -26,27 +27,29 @@ func NewDownloader(fileIds []string, destinationPath string) *Downloader {
 		FileIds:          fileIds,
 		DestinationPath:  destinationPath,
 		PendingDownloads: make(map[string]*types.Progress),
+		cancelFuncs:      make(map[string]context.CancelFunc),
 	}
 }
 
-func (d *Downloader) StartDownload(accToken string, fileName string) error {
+func (d *Downloader) StartDownload(ctx context.Context, accToken string, fileName string) error {
 	for _, fileID := range d.FileIds {
-
 		progChan := make(chan *types.Progress)
 		d.progressChans[fileID] = progChan
 
 		errChan := make(chan error)
 		d.ErrChans[fileID] = errChan
 
+		downloadCtx, cancel := context.WithCancel(ctx)
+		d.cancelFuncs[fileID] = cancel
+
 		// Start multiple downloads in dedicated go routines
 		go func(fileID string) {
 			err := service.GDriveDownloader(service.DownloaderConfig{
 				FileID:          fileID,
-				UserID:          d.UserID,
 				DestinationPath: d.DestinationPath,
 				FileName:        fileName,
 				AccessToken:     accToken,
-			}, progChan)
+			}, progChan, downloadCtx)
 			if err != nil {
 				log.Errorf("error downloading file %s: %v\n", fileID, err)
 				errChan <- err
@@ -67,7 +70,7 @@ func (d *Downloader) StartDownload(accToken string, fileName string) error {
 	return nil
 }
 
-func (d *Downloader) GetPendingDownloads(userID string) ([]*types.Progress, error) {
+func (d *Downloader) GetPendingDownloads() ([]*types.Progress, error) {
 	d.pendingDownloadsMu.Lock()
 	defer d.pendingDownloadsMu.Unlock()
 
@@ -78,15 +81,13 @@ func (d *Downloader) GetPendingDownloads(userID string) ([]*types.Progress, erro
 	var pendingsDownloads []*types.Progress
 	for _, prog := range d.PendingDownloads {
 		// Check if the progress belongs to the specified userID
-		if prog.UserID == userID {
-			pendingsDownloads = append(pendingsDownloads, prog)
-		}
+		pendingsDownloads = append(pendingsDownloads, prog)
 	}
 
 	return pendingsDownloads, nil
 }
 
-func (d *Downloader) GetProgress(fileID string, userID string) (*types.Progress, error) {
+func (d *Downloader) GetProgress(fileID string) (*types.Progress, error) {
 	d.pendingDownloadsMu.Lock()
 	defer d.pendingDownloadsMu.Unlock()
 
@@ -95,10 +96,6 @@ func (d *Downloader) GetProgress(fileID string, userID string) (*types.Progress,
 	}
 
 	prog := d.PendingDownloads[fileID]
-	if prog.UserID != userID {
-		log.Info("Downloader, GetProgress: the user initiated the download and the one requesting the progress doesn't match")
-		return nil, fmt.Errorf("no ongoing downloads")
-	}
 
 	return prog, nil
 }
@@ -121,6 +118,22 @@ func (d *Downloader) DeleteProgress(fileID string) {
 	defer d.pendingDownloadsMu.Unlock()
 
 	delete(d.PendingDownloads, fileID)
+}
+
+func (d *Downloader) CancelDownload(fileID string) error {
+	cancel, ok := d.cancelFuncs[fileID]
+	if !ok {
+		return fmt.Errorf("no downloads found to cancel")
+	}
+	cancel()
+
+	return nil
+}
+
+func (d *Downloader) CancelAllDownloads() {
+	for _, cancel := range d.cancelFuncs {
+		cancel()
+	}
 }
 
 func (d *Downloader) cleanUp(fileID string) {

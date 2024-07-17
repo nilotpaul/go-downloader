@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -48,12 +49,6 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 			"invalid link(s)",
 		)
 	}
-	if util.HasDuplicates(fileIDs) {
-		return util.NewAppError(
-			http.StatusBadRequest,
-			"duplicate links found",
-		)
-	}
 
 	gp, err := h.registry.GetProvider(setting.GoogleProvider)
 	if err != nil {
@@ -63,48 +58,56 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 		)
 	}
 
-	sess, err := util.GetSessionFromStore(c, h.sessStore)
+	t := gp.GetAccessToken()
+	srv, err := util.MakeGDriveService(c.Context(), t)
 	if err != nil {
 		return util.NewAppError(
-			http.StatusUnauthorized,
-			"no session found",
+			http.StatusNotFound,
+			"failed to initialize the GDrive service",
+			err,
 		)
 	}
 
-	h.downloader.FileIds = fileIDs
+	for _, folderID := range fileIDs["folder"] {
+		Ids, err := util.GetFileIDsFromFolder(srv, folderID)
+		if err != nil {
+			return util.NewAppError(
+				http.StatusInternalServerError,
+				fmt.Sprintf("failed to get contents from folder %s. %s\n", folderID, err.Error()),
+			)
+		}
+		fileIDs["file"] = append(fileIDs["file"], Ids...)
+	}
+	if len(fileIDs["file"]) == 0 {
+		return util.NewAppError(
+			http.StatusBadRequest,
+			"invalid link(s)",
+		)
+	}
+	if util.HasDuplicates(fileIDs["file"]) {
+		return util.NewAppError(
+			http.StatusBadRequest,
+			"duplicate links found",
+		)
+	}
+
+	h.downloader.FileIds = fileIDs["file"]
 	h.downloader.DestinationPath = b.DestinationPath
-	h.downloader.UserID = sess.UserID
 
 	slog.Info("downloading", "GDrive fileIDs: ", fileIDs)
 
-	t := gp.GetAccessToken()
-	if err := h.downloader.StartDownload(t, ""); err != nil {
+	if err := h.downloader.StartDownload(c.Context(), t, ""); err != nil {
 		return err
 	}
 
 	return c.JSON(fiber.Map{
 		"status":   http.StatusOK,
-		"file_ids": fileIDs,
+		"file_ids": fileIDs["file"],
 	})
 }
 
 func (h *DownloadHandler) ProgressHTTPHandler(c *fiber.Ctx) error {
-	userID, ok := c.Locals(setting.LocalSessionKey).(string)
-	if !ok {
-		log.Println("invalid session type: ", userID)
-		return util.NewAppError(
-			http.StatusNotFound,
-			"no session found",
-		)
-	}
-	if len(userID) == 0 {
-		return util.NewAppError(
-			http.StatusNotFound,
-			"no session found",
-		)
-	}
-
-	pendings, _ := h.downloader.GetPendingDownloads(userID)
+	pendings, _ := h.downloader.GetPendingDownloads()
 	if len(pendings) == 0 {
 		return util.NewAppError(
 			http.StatusNotFound,
@@ -113,6 +116,43 @@ func (h *DownloadHandler) ProgressHTTPHandler(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(pendings)
+}
+
+func (h *DownloadHandler) CancelDownloadHandler(c *fiber.Ctx) error {
+	fileID, err := util.ValidateCancelDownloadHRBody(c)
+	if err != nil {
+		return err
+	}
+
+	if _, err := h.downloader.GetProgress(fileID); err != nil {
+		return util.NewAppError(
+			http.StatusNotFound,
+			"no ongoing downloads",
+		)
+	}
+
+	if err := h.downloader.CancelDownload(fileID); err != nil {
+		return util.NewAppError(
+			http.StatusInternalServerError,
+			fmt.Sprintf("failed to cancel the download for file %s", fileID),
+		)
+	}
+
+	return c.JSON("OK")
+}
+
+func (h *DownloadHandler) CancelAllDownloadsHandler(c *fiber.Ctx) error {
+	uID, ok := c.Locals(setting.LocalSessionKey).(string)
+	if !ok {
+		log.Println("invalid session type: ", uID)
+		return util.NewAppError(
+			http.StatusNotFound,
+			"no session found",
+		)
+	}
+	h.downloader.CancelAllDownloads()
+
+	return c.JSON("OK")
 }
 
 func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
@@ -129,16 +169,8 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 			"invalid session cookie",
 		)
 	}
-
-	uID, ok := c.Locals(setting.LocalSessionKey).(string)
-	if !ok {
-		return util.NewAppError(
-			websocket.TextMessage,
-			"invalid UserID",
-		)
-	}
 	for {
-		pendings, _ := h.downloader.GetPendingDownloads(uID)
+		pendings, _ := h.downloader.GetPendingDownloads()
 		progressJSON, err := json.Marshal(pendings)
 		if err != nil {
 			return util.NewAppError(

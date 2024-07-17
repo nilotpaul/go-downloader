@@ -4,7 +4,6 @@ import "time"
 
 type Progress struct {
 	FileID       string    `json:"file_id"`
-	UserID       string    `json:"user_id"`
 	Total        int64     `json:"total"`
 	Current      int       `json:"current"`
 	Complete     bool      `json:"complete"`
@@ -17,6 +16,10 @@ type Progress struct {
 type DownloadHRBody struct {
 	Links           string `json:"links"`
 	DestinationPath string `json:"path"`
+}
+
+type CancelDownloadHRBody struct {
+	FileID string `json:"file_id"`
 }
 
 type Downloader interface {

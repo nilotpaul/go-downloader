@@ -1,19 +1,20 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"math"
 	"time"
 
+	"github.com/gofiber/fiber/v2/log"
 	"github.com/nilotpaul/go-downloader/types"
 	"github.com/nilotpaul/go-downloader/util"
 )
 
 type DownloaderConfig struct {
 	FileID          string
-	UserID          string
 	DestinationPath string
 	FileName        string
 	AccessToken     string
@@ -21,23 +22,23 @@ type DownloaderConfig struct {
 
 // GDriveDownloader will fallback to the original filename in if the filename parameter
 // is an empty string.
-func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress) error {
+func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx context.Context) error {
 	if err := validateDownloaderConfig(cfg); err != nil {
 		return err
 	}
 
-	srv, err := util.MakeGDriveService(cfg.AccessToken)
+	srv, err := util.MakeGDriveService(ctx, cfg.AccessToken)
 	if err != nil {
 		return fmt.Errorf("failed to initialize GDrive service")
 	}
 
 	file, err := srv.Files.Get(cfg.FileID).Do()
 	if err != nil {
-		return fmt.Errorf("failed to get file info: %v", err.Error())
+		return fmt.Errorf("failed to get file info: %v", err)
 	}
-	// if file.MimeType != "application/vnd.google-apps.file" {
-	// 	return fmt.Errorf("expected file, got a folder. downloading a folder is not supported yet")
-	// }
+	if file.MimeType == "application/vnd.google-apps.folder" {
+		return fmt.Errorf("expected file, received a folder")
+	}
 	if len(cfg.FileName) == 0 {
 		cfg.FileName = file.OriginalFilename
 	}
@@ -51,7 +52,7 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 
 	res, err := srv.Files.Get(cfg.FileID).Download()
 	if err != nil {
-		return fmt.Errorf("failed with %d to download the file: %s", res.StatusCode, err.Error())
+		return fmt.Errorf("failed with %d to download the file: %v", res.StatusCode, err)
 	}
 	defer res.Body.Close()
 
@@ -62,34 +63,41 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 
 	prog := &types.Progress{
 		FileID:       cfg.FileID,
-		UserID:       cfg.UserID,
 		Total:        file.FileSize,
 		ReadableSize: util.FormatBytes(file.FileSize),
 		StartTime:    time.Now(),
 	}
 
 	// Sending the initial progress
-	progressChan <- prog
+	progChan <- prog
 
 	for {
 		n, err := res.Body.Read(buf)
-		if n > 0 {
-			written, writeErr := destFile.Write(buf[0:n])
-			if writeErr != nil {
-				return fmt.Errorf("failed to write the file content")
-			}
 
-			totalWritten += int64(written)
-			prog.Current = int(float64(totalWritten) / float64(file.FileSize) * 100)
-			elapsedTime := time.Since(prog.StartTime).Seconds()
-			if elapsedTime > 0 {
-				speed := ((float64(totalWritten) / elapsedTime) / 1e6) // Speed in Mbps
-				prog.Speed = math.Round(speed*100) / 100               // Rounded to two decimal places
-			}
+		select {
+		case <-ctx.Done():
+			log.Infof("download cancelled for %s", cfg.FileID)
+			return nil
+		default:
+			if n > 0 {
+				written, writeErr := destFile.Write(buf[0:n])
+				if writeErr != nil {
+					return fmt.Errorf("failed to write the file content")
+				}
 
-			// Updating the downloading progress
-			progressChan <- prog
+				totalWritten += int64(written)
+				prog.Current = int(float64(totalWritten) / float64(file.FileSize) * 100)
+				elapsedTime := time.Since(prog.StartTime).Seconds()
+				if elapsedTime > 0 {
+					speed := ((float64(totalWritten) / elapsedTime) / 1e6) // Speed in Mbps
+					prog.Speed = math.Round(speed*100) / 100               // Rounded to two decimal places
+				}
+
+				// Updating the downloading progress
+				progChan <- prog
+			}
 		}
+
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -101,15 +109,16 @@ func GDriveDownloader(cfg DownloaderConfig, progressChan chan<- *types.Progress)
 	// Mark download as complete
 	prog.Complete = true
 	prog.EndTime = time.Now()
-	progressChan <- prog
+	progChan <- prog
 
 	return nil
 }
 
+func downloadFiles() {
+
+}
+
 func validateDownloaderConfig(cfg DownloaderConfig) error {
-	if len(cfg.UserID) == 0 {
-		return fmt.Errorf("invalid user id")
-	}
 	if len(cfg.FileID) == 0 {
 		return fmt.Errorf("invalid file id")
 	}
