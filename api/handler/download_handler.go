@@ -62,7 +62,7 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 	srv, err := util.MakeGDriveService(c.Context(), t)
 	if err != nil {
 		return util.NewAppError(
-			http.StatusNotFound,
+			http.StatusInternalServerError,
 			"failed to initialize the GDrive service",
 			err,
 		)
@@ -142,14 +142,6 @@ func (h *DownloadHandler) CancelDownloadHandler(c *fiber.Ctx) error {
 }
 
 func (h *DownloadHandler) CancelAllDownloadsHandler(c *fiber.Ctx) error {
-	uID, ok := c.Locals(setting.LocalSessionKey).(string)
-	if !ok {
-		log.Println("invalid session type: ", uID)
-		return util.NewAppError(
-			http.StatusNotFound,
-			"no session found",
-		)
-	}
 	h.downloader.CancelAllDownloads()
 
 	return c.JSON("OK")
@@ -220,4 +212,16 @@ func (h *DownloadHandler) ProgressWebsocketHandler(c *websocket.Conn) error {
 	}
 
 	return c.WriteMessage(websocket.TextMessage, infoMsg)
+}
+
+func (h *DownloadHandler) FolderTreeHandler(c *fiber.Ctx) error {
+	tree, err := util.GetFolderTree(".")
+	if err != nil {
+		return util.NewAppError(
+			http.StatusInternalServerError,
+			"failed to retrieve the folder tree",
+		)
+	}
+
+	return c.JSON(tree)
 }

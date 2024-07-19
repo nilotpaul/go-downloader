@@ -114,10 +114,6 @@ func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx
 	return nil
 }
 
-func downloadFiles() {
-
-}
-
 func validateDownloaderConfig(cfg DownloaderConfig) error {
 	if len(cfg.FileID) == 0 {
 		return fmt.Errorf("invalid file id")

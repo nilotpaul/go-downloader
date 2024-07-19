@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/nilotpaul/go-downloader/setting"
 	"github.com/nilotpaul/go-downloader/types"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v2"
@@ -94,13 +95,13 @@ func GetGDriveFileID(url string) (string, bool) {
 
 	// for files
 	expFile1 := regexp.MustCompile(`drive\.google\.com\/open\?id\=(.*)`)
-	expFile2 := regexp.MustCompile(`drive\.google\.com\/file\/d\/(.*?)\/`)
-	expFile3 := regexp.MustCompile(`drive\.google\.com\/uc\?id\=(.*?)\&`)
+	expFile2 := regexp.MustCompile(`drive\.google\.com\/file\/d\/([^\/\?]+)(\/|$)`)
+	expFile3 := regexp.MustCompile(`drive\.google\.com\/uc\?id\=(.*?)(\/|$|&)`)
 
 	// for folders
-	expFolder1 := regexp.MustCompile(`drive\.google\.com\/drive\/folders\/(.*?)\?`)
-	expFolder2 := regexp.MustCompile(`drive\.google\.com\/drive\/u\/\d+\/folders\/(.*?)\?`)
-	expFolder3 := regexp.MustCompile(`drive\.google\.com\/folderview\?id\=(.*?)\&`)
+	expFolder1 := regexp.MustCompile(`drive\.google\.com\/drive\/folders\/([^\/\?]+)(\/|$|\?)`)
+	expFolder2 := regexp.MustCompile(`drive\.google\.com\/drive\/u\/\d+\/folders\/([^\/\?]+)(\/|$|\?)`)
+	expFolder3 := regexp.MustCompile(`drive\.google\.com\/folderview\?id\=(.*?)(\/|$|&)`)
 
 	if matches := expFile1.FindStringSubmatch(url); len(matches) > 1 {
 		fileID = matches[1]
@@ -108,7 +109,6 @@ func GetGDriveFileID(url string) (string, bool) {
 	} else if matches := expFile2.FindStringSubmatch(url); len(matches) > 1 {
 		fileID = matches[1]
 		isFile = true
-
 	} else if matches := expFile3.FindStringSubmatch(url); len(matches) > 1 {
 		fileID = matches[1]
 		isFile = true
@@ -167,6 +167,60 @@ func GetFileIDsFromFolder(srv *drive.Service, folderID string) ([]string, error)
 	}
 
 	return folderIDs, nil
+}
+
+func GetFolderTree(rootPath string) (*types.FolderNode, error) {
+	var buildTree func(string) (*types.FolderNode, error)
+	buildTree = func(path string) (*types.FolderNode, error) {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+
+		// Skip files
+		if !info.IsDir() {
+			return nil, nil
+		}
+
+		// Skip excluded directories
+		for _, excluded := range setting.ExcludeDirs {
+			if excluded == path {
+				return nil, nil
+			}
+		}
+
+		node := &types.FolderNode{
+			Path:     "./" + path,
+			Name:     filepath.Base(path),
+			Children: make([]types.FolderNode, 0),
+		}
+		files, err := os.ReadDir(path)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, file := range files {
+			childPath := filepath.Join(path, file.Name())
+			childNode, err := buildTree(childPath)
+			if err != nil {
+				return nil, err
+			}
+			// Only add childNode to children if it's a directory
+			if childNode != nil {
+				node.Children = append(node.Children, *childNode)
+			}
+		}
+
+		return node, nil
+	}
+
+	// Start building the tree from the rootPath
+	rootNode, err := buildTree(rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return rootNode, nil
 }
 
 // FormatBytes returns a human-readable string representation

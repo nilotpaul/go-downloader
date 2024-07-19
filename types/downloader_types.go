@@ -13,6 +13,12 @@ type Progress struct {
 	Speed        float64   `json:"speed"`
 }
 
+type FolderNode struct {
+	Path     string       `json:"path"`
+	Name     string       `json:"name"`
+	Children []FolderNode `json:"children,omitempty"`
+}
+
 type DownloadHRBody struct {
 	Links           string `json:"links"`
 	DestinationPath string `json:"path"`

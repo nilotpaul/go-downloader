@@ -57,4 +57,6 @@ func (h *Router) RegisterRoutes(r fiber.Router) {
 	r.Post("/cancelAll", sessionMW.SessionMiddleware, sessionMW.WithGoogleOAuth, downloadHR.CancelAllDownloadsHandler)
 	r.Get("/progress", sessionMW.SessionMiddleware, downloadHR.ProgressHTTPHandler)
 	r.Get("/ws/progress", util.MakeWebsocketHandler(downloadHR.ProgressWebsocketHandler, h.env.AppURL))
+
+	r.Get("/folderTree", downloadHR.FolderTreeHandler)
 }

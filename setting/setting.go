@@ -5,9 +5,28 @@ import (
 )
 
 // supported providers
-var Providers = []string{
-	"google",
-}
+var (
+	Providers = []string{
+		"google",
+	}
+
+	// project folders to be excluded from folder tree overview.
+	ExcludeDirs = []string{
+		".vscode",
+		".git",
+		"api",
+		"bin",
+		"config",
+		"dist",
+		"migrations",
+		"service",
+		"setting",
+		"store",
+		"tmp",
+		"types",
+		"util",
+	}
+)
 
 const (
 	GoogleProvider string = "google"
