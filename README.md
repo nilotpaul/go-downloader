@@ -53,11 +53,12 @@ services:
       - APP_URL=${APP_URL} # Full URL with http or https
       - DOMAIN=${DOMAIN} # eg. yourdomain.com
       - DB_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@go_downloader_pg_db:5432/${POSTGRES_DB}?sslmode=disable
-      - DEFAULT_DOWNLOAD_PATH=/media
+      - DEFAULT_DOWNLOAD_PATH=./media
       - PUID=1000 # Your user id
       - PGID=1000 # Your group id
     volumes:
-      - /media:/media
+      - /media:/root/media # To download files in your system's media folder
+      - /home/your-username/Downloads:/root/Downloads # To download files in your system's Downloads folder
     restart: unless-stopped
 
   go_downloader_pg_db:
@@ -103,6 +104,7 @@ NOTE: **To make this work, you'll need a top-level domain or use it from your lo
 ### With Docker CLI
 
 **FOR DOWNLOADER**
+
 ```bash
 docker run -d \
  --name go_downloader \
@@ -123,6 +125,7 @@ docker run -d \
 ```
 
 **FOR POSTGRES DB**
+
 ```bash
 docker run -d \
  --name go_downloader_pg_db \
