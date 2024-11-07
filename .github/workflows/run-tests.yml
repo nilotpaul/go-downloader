@@ -22,6 +22,11 @@ jobs:
       - name: Display Go version
         run: go version
 
+      - name: Create a dist dir with random file 
+        run: |
+          mkdir -p dist
+          echo "placeholder content" > dist/_placeholder.txt
+
       - name: Install Dependencies
         run: go mod tidy
       
