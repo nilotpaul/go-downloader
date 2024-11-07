@@ -33,9 +33,8 @@ func main() {
 	// auth providers are registered.
 	r := store.InitStore(*env, db)
 
-	s := api.NewAPIServer(env.Port, *env, r, db, build)
+	// All routes, handlers & middlewares are registered here.
+	server := api.NewAPIServer(env.Port, *env, r, db, build)
 
-	// All routes, handlers & middlewares are registered
-	// in func Start().
-	log.Fatal(s.Start())
+	log.Fatal(server.Start())
 }

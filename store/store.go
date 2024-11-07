@@ -26,12 +26,12 @@ func (r *ProviderRegistry) Register(providerName setting.Provider, p types.OAuth
 	r.Providers[provider] = p
 }
 
-// Retrieves a provider in the `Providers` map.
+// Retrieves a provider from the `Providers` map.
 func (r *ProviderRegistry) GetProvider(providerName setting.Provider) (types.OAuthProvider, error) {
 	provider := string(providerName)
 	p, exists := r.Providers[provider]
 	if !exists {
-		return nil, fmt.Errorf("provider doesn't exists")
+		return nil, fmt.Errorf("provider not found")
 	}
 
 	return p, nil
