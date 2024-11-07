@@ -20,13 +20,14 @@ type DownloaderConfig struct {
 	AccessToken     string
 }
 
-// GDriveDownloader will fallback to the original filename in if the filename parameter
-// is an empty string.
+// GDriveDownloader will fallback to the original filename in if the `filename` parameter is an empty string.
 func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx context.Context) error {
+	// Validates the downloader configuration.
 	if err := validateDownloaderConfig(cfg); err != nil {
 		return err
 	}
 
+	// Making a GDrive Service with the access token from OAuth.
 	srv, err := util.MakeGDriveService(ctx, cfg.AccessToken)
 	if err != nil {
 		return fmt.Errorf("failed to initialize GDrive service")
@@ -36,14 +37,21 @@ func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %v", err)
 	}
+
+	// In case `fileID` is for a folder we return an error.
 	if file.MimeType == "application/vnd.google-apps.folder" {
 		return fmt.Errorf("expected file, received a folder")
 	}
+
+	// If no manual filename is provided, use the original filename from Google Drive
 	if len(cfg.FileName) == 0 {
 		cfg.FileName = file.OriginalFilename
 	}
 
+	// We take the destination path which is a folder location while the file will be downloaded.
+	// Sanitize the filename to remove any invalid characters for file paths.
 	destFileName := cfg.DestinationPath + "/" + util.SanitizeFileName(cfg.FileName)
+	// Create the destination file, including any necessary directories.
 	destFile, err := util.CreateFile(destFileName)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file %s", destFileName)
@@ -56,6 +64,8 @@ func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx
 	}
 	defer res.Body.Close()
 
+	// Creating a 32KB buffer which will hold a portion of the entire file for streaming.
+	// Downloading the file in 32KB chunks is fast and memory efficient.
 	buf := make([]byte, 32*1024) // 32KB buffer
 	var totalWritten int64
 
@@ -72,8 +82,11 @@ func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx
 	progChan <- prog
 
 	for {
+		// Read the response body in chunks(32KB) and write it to the destination file,
 		n, err := res.Body.Read(buf)
 
+		// If `cancel` function is called from the download context, the loop will break
+		// stopping the ongoing download.
 		select {
 		case <-ctx.Done():
 			log.Infof("download cancelled for %s", cfg.FileID)
@@ -99,9 +112,11 @@ func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx
 		}
 
 		if err != nil {
+			// Break the loop if error is `EOF` -> End of Line which means the entire file has been downloaded.
 			if err == io.EOF {
 				break
 			}
+			// Otherwise break the loop and return with an error.
 			return fmt.Errorf("failed to read response body of the file %s", file.OriginalFilename)
 		}
 	}

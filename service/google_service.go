@@ -10,10 +10,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const (
-	apiEndpoint = "https://www.googleapis.com/oauth2/v3/userinfo"
-)
+// Endpoint to get the user info using the received access token.
+const apiEndpoint = "https://www.googleapis.com/oauth2/v3/userinfo"
 
+// GetGoogleUserInfo fetches the user info from google with the received OAuth access token.
 func GetGoogleUserInfo(token *oauth2.Token, client *http.Client) (*types.GoogleUserResponse, error) {
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
 	if err != nil {
@@ -47,6 +47,7 @@ func GetGoogleUserInfo(token *oauth2.Token, client *http.Client) (*types.GoogleU
 		)
 	}
 
+	// Decoding the received JSON response and taking only the necessary fields.
 	var userInfo types.GoogleUserResponse
 	if err := util.DecodeJSON(res.Body, &userInfo); err != nil {
 		return nil, util.NewAppError(
@@ -60,6 +61,7 @@ func GetGoogleUserInfo(token *oauth2.Token, client *http.Client) (*types.GoogleU
 	return &userInfo, nil
 }
 
+// CreateUserAndAccount creates a new user and a google account with the user info and OAuth Tokens.
 func CreateUserAndAccount(db *sql.DB, user *types.GoogleUserResponse, token *oauth2.Token) (string, error) {
 	tx, err := db.Begin()
 	if err != nil {
@@ -67,17 +69,21 @@ func CreateUserAndAccount(db *sql.DB, user *types.GoogleUserResponse, token *oau
 	}
 	defer util.CommitOrRollback(tx, &err)
 
+	// Query to create user row.
+	// We'll get back the `userID`.
 	const userQuery string = `
 		INSERT INTO users (email)
 		VALUES ($1)
 		RETURNING id
 	`
 
+	// Getting the `userID`.
 	var userID string
 	if err = tx.QueryRow(userQuery, user.Email).Scan(&userID); err != nil {
 		return "", err
 	}
 
+	// Query to create an user account with the received `userID` and the OAuth Tokens.
 	const accQuery = `
 		INSERT INTO google_accounts (
 			user_id, 
@@ -105,7 +111,9 @@ func CreateUserAndAccount(db *sql.DB, user *types.GoogleUserResponse, token *oau
 	return userID, nil
 }
 
+// GetUserAndAccountByEmail gets the user and google account by email.
 func GetUserAndAccountByEmail(db *sql.DB, email string) (*types.User, *types.GoogleAccount, error) {
+	// Query to get the user and its google account.
 	const query = `
 	    SELECT 
 		    u.id, u.email, 
@@ -118,6 +126,7 @@ func GetUserAndAccountByEmail(db *sql.DB, email string) (*types.User, *types.Goo
 		    u.email = $1
 	`
 
+	// Scanning the returned rows to get the `user` and `account`.
 	var (
 		u   types.User
 		acc types.GoogleAccount
@@ -134,6 +143,7 @@ func GetUserAndAccountByEmail(db *sql.DB, email string) (*types.User, *types.Goo
 	return &u, &acc, nil
 }
 
+// GetAccountByUserID gets the user's google account by `userID`.
 func GetAccountByUserID(db *sql.DB, userID string) (*types.GoogleAccount, error) {
 	const query = `SELECT * FROM google_accounts WHERE user_id = $1`
 
@@ -156,6 +166,7 @@ func GetAccountByUserID(db *sql.DB, userID string) (*types.GoogleAccount, error)
 	return &acc, nil
 }
 
+// GetUserByEmail gets the user by `email`.
 func GetUserByEmail(db *sql.DB, email string) (*types.User, error) {
 	const query = `SELECT * FROM users WHERE email = $1`
 
@@ -173,6 +184,7 @@ func GetUserByEmail(db *sql.DB, email string) (*types.User, error) {
 	return &u, nil
 }
 
+// Gets the user by `userID`.
 func GetUserByID(db *sql.DB, userID string) (*types.User, error) {
 	const query = `SELECT * FROM users WHERE id = $1`
 
@@ -190,6 +202,7 @@ func GetUserByID(db *sql.DB, userID string) (*types.User, error) {
 	return &u, nil
 }
 
+// Updates the google account by `userID`
 func UpdateAccountByUserID(db *sql.DB, userID string, acc *types.GoogleAccount) error {
 	const query = `
 	    UPDATE google_accounts
@@ -202,7 +215,7 @@ func UpdateAccountByUserID(db *sql.DB, userID string, acc *types.GoogleAccount) 
 		WHERE
             user_id = $5
 	`
-	if _, err := db.Exec(
+	_, err := db.Exec(
 		query,
 		acc.AccessToken,
 		acc.RefreshToken,
@@ -210,7 +223,8 @@ func UpdateAccountByUserID(db *sql.DB, userID string, acc *types.GoogleAccount) 
 		acc.ExpiresAt,
 		userID,
 		time.Now(),
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 

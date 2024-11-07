@@ -55,52 +55,45 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 	// which contains the UserID and JWT Expiry.
 	token := util.GetSessionToken(c)
 	if len(token) == 0 {
-		slog.Error("SessionMiddleware", "error", "token length 0")
 		return c.Next()
 	}
-	// verifies and extracts the UserID from JWT Token.
+
+	// Verifies and extracts the UserID from JWT Token.
 	decoded, err := util.VerifyAndDecodeSessionToken(token, m.env.SessionSecret)
 	if err != nil {
+		slog.Error("invalid session", "SessionMiddleware error", err)
 		m.resetPersistingSession(c, gp)
-		return util.NewAppError(
-			http.StatusBadRequest,
-			"invalid session",
-			"SessionMiddleware error: ",
-			err,
-		)
+		return c.Next()
 	}
 
 	session, err := service.GetAccountByUserID(m.db, decoded.UserID)
 	if err != nil {
+		slog.Error("invalid session", "SessionMiddleware error", err)
 		m.resetPersistingSession(c, gp)
-		return util.NewAppError(
-			http.StatusInternalServerError,
-			"invalid session",
-			"SessionMiddleware error: ",
-			err,
-		)
+		return c.Next()
 	}
 	if session == nil {
+		slog.Error("no account found", "SessionMiddleware error", err)
 		m.resetPersistingSession(c, gp)
-		return util.NewAppError(
-			http.StatusNotFound,
-			"no account found",
-		)
+		return c.Next()
 	}
 
 	// Injecting provider with the old and potentially (expired/invalid) tokens,
 	// so that it can be used to refresh the token later.
 	if err := gp.UpdateTokens(session); err != nil {
+		slog.Error("failed to update with old tokens", "SessionMiddleware error", err)
 		m.resetPersistingSession(c, gp)
-		return err
+		return c.Next()
 	}
+
 	// If token has expired or is invalid, RefreshToken will generate a new
 	// AccessToken and update the user account in database.
 	if !gp.IsTokenValid() {
 		t, err := gp.RefreshToken(c, session.UserID, false)
 		if err != nil {
+			slog.Error("failed to refresh the token", "SessionMiddleware error", err)
 			m.resetPersistingSession(c, gp)
-			return err
+			return c.Next()
 		}
 
 		session.AccessToken = t.AccessToken
@@ -109,21 +102,24 @@ func (m *SessionMiddleware) SessionMiddleware(c *fiber.Ctx) error {
 		session.ExpiresAt = t.Expiry
 	}
 
-	// Injecting provider with the new tokens,
+	// Injecting provider with the new tokens.
 	if err := gp.UpdateTokens(session); err != nil {
+		slog.Error("failed to update with new tokens", "SessionMiddleware error", err)
 		m.resetPersistingSession(c, gp)
-		return err
+		return c.Next()
 	}
+
 	// Setting the session in the in memory session store.
 	if err := util.SetSessionInStore(c, m.sessStore, session); err != nil {
+		slog.Error("failed to set the session in memory store", "SessionMiddleware error", err)
 		m.resetPersistingSession(c, gp)
-		return err
+		return c.Next()
 	}
 
 	// Set the UserID in the request, already done in Session Storage
 	// but this will be used in websocket conns as the type of
-	// fiber.Ctx and websocket.Conn doesn't match, hence retrieving
-	// sessions from storage is not possible as it requires fiber.Ctx.
+	// `fiber.Ctx `and `websocket.Conn` doesn't match, hence retrieving
+	// sessions from storage is not possible.
 	c.Locals(setting.LocalSessionKey, session.UserID)
 
 	return c.Next()
@@ -169,6 +165,8 @@ func (m *SessionMiddleware) WithoutGoogleOAuth(c *fiber.Ctx) error {
 	return c.Next()
 }
 
+// resetPersistingSession will update the session and token state with empty or nil values.
+// It'll reset the persisting session when an error occurs in `SessionMiddleware`.
 func (m *SessionMiddleware) resetPersistingSession(c *fiber.Ctx, gp types.OAuthProvider) {
 	if err := gp.UpdateTokens(nil); err != nil {
 		log.Error("failed reseting session(UpdateTokens): ", err)
@@ -176,5 +174,6 @@ func (m *SessionMiddleware) resetPersistingSession(c *fiber.Ctx, gp types.OAuthP
 	if err := util.SetSessionInStore(c, m.sessStore, nil); err != nil {
 		log.Error("failed reseting session(SetSessionInStore): ", err)
 	}
+
 	c.Locals(setting.LocalSessionKey, "")
 }

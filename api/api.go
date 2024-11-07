@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -12,7 +11,6 @@ import (
 	MW "github.com/nilotpaul/go-downloader/api/middleware"
 	"github.com/nilotpaul/go-downloader/config"
 	"github.com/nilotpaul/go-downloader/store"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 type buildFunc func() fiber.Handler
@@ -44,6 +42,7 @@ func (s *APIServer) Start() error {
 		Format: "[${ip}]:${port} ${status} - ${method} ${path}\n",
 	})
 
+	// Middlewares
 	app.Use(logger)
 	app.Use(cors.New(cors.Config{
 		AllowCredentials: true,
@@ -51,22 +50,18 @@ func (s *APIServer) Start() error {
 		AllowMethods:     "GET,POST",
 	}))
 
+	// API Routes will be prefixed with `/api/v1`.
 	v1 := app.Group("/api/v1")
 
-	handler := NewRouter(s.registry, s.env, s.db)
-	handler.RegisterRoutes(v1)
+	r := NewRouter(s.registry, s.env, s.db)
+	r.RegisterRoutes(v1)
 
-	// static build folder for production usage.
+	// Static build folder for production usage.
+	// In development, this won't do anything.
+	// In production, for all non API routes, it'll serve the static `dist` dir.
 	app.Use("/", s.build())
 
 	log.Printf("Server started on http://localhost:%s", s.listenAddr)
 
 	return app.Listen(":" + s.listenAddr)
-}
-
-func makeFiberHandler(h http.Handler) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		fasthttpadaptor.NewFastHTTPHandler(h)(c.Context())
-		return nil
-	}
 }

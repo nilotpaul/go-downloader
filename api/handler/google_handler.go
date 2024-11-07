@@ -29,9 +29,10 @@ func NewGoogleHandler(registry *store.ProviderRegistry, sessStore *session.Store
 	}
 }
 
+// GoogleSignInHandler sends back an URL for the Google's consent page.
 func (h *GoogleHandler) GoogleSignInHandler(c *fiber.Ctx) error {
-	p, err := h.registry.GetProvider("google")
-	if err != nil || p == nil {
+	gp, err := h.registry.GetProvider(setting.GoogleProvider)
+	if err != nil || gp == nil {
 		return util.NewAppError(
 			http.StatusNotFound,
 			"provider not found",
@@ -43,7 +44,8 @@ func (h *GoogleHandler) GoogleSignInHandler(c *fiber.Ctx) error {
 		return err
 	}
 
-	authURL := p.GetAuthURL(state)
+	// GetAuthURL returns a URL to Google's consent page.
+	authURL := gp.GetAuthURL(state)
 	if len(authURL) == 0 {
 		return util.NewAppError(
 			http.StatusInternalServerError,
@@ -56,12 +58,18 @@ func (h *GoogleHandler) GoogleSignInHandler(c *fiber.Ctx) error {
 	})
 }
 
+// GoogleCallbackHandler uses `code` in URL and exchanges it with OAuth Token.
+// Authenticates the user and create their session cookie.
 func (h *GoogleHandler) GoogleCallbackHandler(c *fiber.Ctx) error {
-	p, err := h.registry.GetProvider("google")
-	if err != nil || p == nil {
-		return fiber.NewError(http.StatusNotFound, err.Error())
+	gp, err := h.registry.GetProvider(setting.GoogleProvider)
+	if err != nil || gp == nil {
+		return util.NewAppError(
+			http.StatusNotFound,
+			"provider not found",
+		)
 	}
 
+	// Getting the `code` from the url.
 	authCode := c.Query("code")
 	if len(authCode) == 0 {
 		return util.NewAppError(
@@ -71,23 +79,29 @@ func (h *GoogleHandler) GoogleCallbackHandler(c *fiber.Ctx) error {
 	}
 
 	// Sets the access & refresh tokens in the GoogleProvider struct.
-	if err := p.Authenticate(authCode); err != nil {
+	if err := gp.Authenticate(authCode); err != nil {
 		return err
 	}
 
-	userID, err := p.CreateOrUpdateAccount()
+	// Creates or Updates the user account in database from the new tokens
+	// that were inserted via Authenticate func above.
+	userID, err := gp.CreateOrUpdateAccount()
 	if err != nil {
 		return err
 	}
 
-	if err := p.CreateSession(c, userID); err != nil {
+	// Creates and sets the session cookie.
+	if err := gp.CreateSession(c, userID); err != nil {
 		return err
 	}
 
+	// Redirecting the user to our App.
 	return c.Redirect(util.GetEnv("REDIRECT_AFTER_LOGIN", "/"), http.StatusPermanentRedirect)
 }
 
+// GetSessionHandler sends back the user session.
 func (h *GoogleHandler) GetSessionHandler(c *fiber.Ctx) error {
+	// Gets the session from memory store.
 	sess, err := util.GetSessionFromStore(c, h.sessStore)
 	if err != nil {
 		util.NewAppError(
@@ -96,6 +110,7 @@ func (h *GoogleHandler) GetSessionHandler(c *fiber.Ctx) error {
 		)
 	}
 
+	// Fetching the user by `userID`.
 	u, err := service.GetUserByID(h.db, sess.UserID)
 	if err != nil {
 		util.NewAppError(
@@ -113,15 +128,18 @@ func (h *GoogleHandler) GetSessionHandler(c *fiber.Ctx) error {
 	return c.JSON(u.Email)
 }
 
+// LogoutHandler clear the user session.
 func (h *GoogleHandler) LogoutHandler(c *fiber.Ctx) error {
-	r, err := h.registry.GetProvider(setting.GoogleProvider)
+	gp, err := h.registry.GetProvider(setting.GoogleProvider)
 	if err != nil {
 		util.NewAppError(
 			http.StatusNotFound,
 			"no provider found",
 		)
 	}
-	err = util.ResetSession(c, r, h.env.Domain)
+
+	// Resets and clears the session state and cookie.
+	err = util.ResetSession(c, gp, h.env.Domain)
 	if err != nil {
 		util.NewAppError(
 			http.StatusNotFound,
@@ -132,6 +150,7 @@ func (h *GoogleHandler) LogoutHandler(c *fiber.Ctx) error {
 	return c.JSON("OK")
 }
 
+// RefreshTokenHandler forcefully refreshes the session even if it's still valid.
 func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 	gp, err := h.registry.GetProvider(setting.GoogleProvider)
 	if err != nil {
@@ -141,6 +160,7 @@ func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 			err,
 		)
 	}
+
 	sess, err := util.GetSessionFromStore(c, h.sessStore)
 	if err != nil {
 		return util.NewAppError(
@@ -150,6 +170,7 @@ func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 		)
 	}
 
+	// Here, we forcefully refresh the session which might still be valid.
 	t, err := gp.RefreshToken(c, sess.UserID, true)
 	if err != nil {
 		return err
@@ -160,6 +181,7 @@ func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 	sess.TokenType = t.TokenType
 	sess.ExpiresAt = t.Expiry
 
+	// Updating the token state.
 	if err := gp.UpdateTokens(sess); err != nil {
 		return util.NewAppError(
 			http.StatusInternalServerError,
@@ -167,6 +189,7 @@ func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 			err,
 		)
 	}
+	// Updating the memory store.
 	if err := util.SetSessionInStore(c, h.sessStore, sess); err != nil {
 		return util.NewAppError(
 			http.StatusInternalServerError,
@@ -174,7 +197,7 @@ func (h *GoogleHandler) RefreshTokenHandler(c *fiber.Ctx) error {
 			err,
 		)
 	}
-
+	// Updating the local store (only for WS Connections).
 	c.Locals(setting.LocalSessionKey, sess.UserID)
 
 	return c.JSON("OK")

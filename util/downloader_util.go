@@ -130,22 +130,22 @@ func GetGDriveFileID(url string) (string, bool) {
 	return fileID, isFile
 }
 
-func GetFileIDs(linksStr string) map[string][]string {
-	fileIds := make(map[string][]string)
+func ParseGDriveIDs(linksStr string) map[string][]string {
+	IDs := make(map[string][]string)
 
 	links := strings.Split(linksStr, ",")
 	for _, link := range links {
 		fileID, isFile := GetGDriveFileID(link)
 		if len(fileID) != 0 {
 			if isFile {
-				fileIds["file"] = append(fileIds["file"], fileID)
+				IDs["file"] = append(IDs["file"], fileID)
 			} else {
-				fileIds["folder"] = append(fileIds["folder"], fileID)
+				IDs["folder"] = append(IDs["folder"], fileID)
 			}
 		}
 	}
 
-	return fileIds
+	return IDs
 }
 
 func GetFileIDsFromFolder(srv *drive.Service, folderID string) ([]string, error) {

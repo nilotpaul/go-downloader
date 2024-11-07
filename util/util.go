@@ -26,7 +26,6 @@ func GetEnv(key string, fallback ...string) string {
 
 func IsProduction() bool {
 	e := GetEnv("ENVIRONMENT")
-
 	return e == "PROD"
 }
 

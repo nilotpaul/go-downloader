@@ -18,8 +18,6 @@ func initDB(DBURL string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	log.Println("DB Connected")
-
 	return db, nil
 }
 
@@ -28,6 +26,8 @@ func MustInitDB(DBURL string) *sql.DB {
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect to DB: %s", err))
 	}
+
+	log.Println("DB Connected")
 
 	return db
 }

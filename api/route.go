@@ -28,7 +28,7 @@ func NewRouter(registry *store.ProviderRegistry, env config.EnvConfig, db *sql.D
 }
 
 func (h *Router) RegisterRoutes(r fiber.Router) {
-	// creates an in memory storage for session.
+	// Creates an in memory storage for session.
 	store := session.New(session.Config{
 		CookieDomain: h.env.Domain,
 	})
@@ -41,22 +41,24 @@ func (h *Router) RegisterRoutes(r fiber.Router) {
 	// Middlewares
 	sessionMW := MW.NewSessionMiddleware(h.env, store, h.db, h.registry)
 
-	// OAuth Handler for google.
+	// Handlers
 	googleHR := handler.NewGoogleHandler(h.registry, store, h.db, h.env)
+	downloadHR := handler.NewDownloadHandler(h.registry, h.sessStore, h.env)
+
+	// OAuth Routes for google.
 	r.Post("/signin/google", sessionMW.SessionMiddleware, sessionMW.WithoutGoogleOAuth, googleHR.GoogleSignInHandler)
 	r.Post("/refresh", sessionMW.SessionMiddleware, sessionMW.WithGoogleOAuth, googleHR.RefreshTokenHandler)
 	r.Post("/logout", sessionMW.WithGoogleOAuth, googleHR.LogoutHandler)
 	r.Get("/callback/google", sessionMW.SessionMiddleware, sessionMW.WithoutGoogleOAuth, googleHR.GoogleCallbackHandler)
 
-	downloadHR := handler.NewDownloadHandler(h.registry, h.sessStore, h.env)
-
-	// For now this download route will only support GDrive, later multiple providers
-	// will be handled here.
+	// Download Routes
+	// Note: For now this download route will only support GDrive, later multiple providers will be handled here.
 	r.Post("/download", sessionMW.SessionMiddleware, sessionMW.WithGoogleOAuth, downloadHR.DownloadHandler)
 	r.Post("/cancel", sessionMW.SessionMiddleware, sessionMW.WithGoogleOAuth, downloadHR.CancelDownloadHandler)
 	r.Post("/cancelAll", sessionMW.SessionMiddleware, sessionMW.WithGoogleOAuth, downloadHR.CancelAllDownloadsHandler)
 	r.Get("/progress", sessionMW.SessionMiddleware, downloadHR.ProgressHTTPHandler)
 	r.Get("/ws/progress", util.MakeWebsocketHandler(downloadHR.ProgressWebsocketHandler, h.env.AppURL))
 
+	// Folder Tree structure Route
 	r.Get("/folderTree", downloadHR.FolderTreeHandler)
 }

@@ -4,13 +4,8 @@ import (
 	"time"
 )
 
-// supported providers
 var (
-	Providers = []string{
-		"google",
-	}
-
-	// project folders to be excluded from folder tree overview.
+	// Project folders to be excluded from folder tree overview.
 	ExcludeDirs = []string{
 		".vscode",
 		".git",
@@ -28,16 +23,20 @@ var (
 	}
 )
 
+type Provider string
+
+// Supported Providers List.
 const (
-	GoogleProvider string = "google"
+	GoogleProvider Provider = "google"
 )
 
+// Other Utilities.
 const (
-	APIPrefix  string = "/api/v1"
-	SessionKey string = "session_token"
+	APIPrefix       string = "/api/v1"
+	SessionKey      string = "session_token"
+	LocalSessionKey string = "session_user_id"
 
-	LocalSessionKey  string = "session_user_id"
-	FolderPermission int    = 0775
+	FolderPermission int = 0775
 )
 
 var SessionExpiry time.Time = time.Now().AddDate(0, 6, 0) // 6 months expiration time.

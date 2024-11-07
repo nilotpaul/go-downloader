@@ -4,6 +4,7 @@ bin
 *.env
 .env.*
 media
+downloads
 node_modules
 build
 dist

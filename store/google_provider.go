@@ -50,6 +50,7 @@ func NewGoogleProvider(cfg googleProviderConfig, db *sql.DB, env config.EnvConfi
 	}
 }
 
+// `Authenticate` exchanges the authorization code for an access token.
 func (g *GoogleProvider) Authenticate(authCode string) error {
 	ctx := context.Background()
 	token, err := g.Config.Exchange(ctx, authCode, oauth2.ApprovalForce)
@@ -71,34 +72,40 @@ func (g *GoogleProvider) Authenticate(authCode string) error {
 		)
 	}
 
+	// Updating the `GoogleProvider` struct with the token and a new HTTP client.
 	g.Token = token
 	g.HttpClient = g.Config.Client(ctx, token)
 
 	return nil
 }
 
+// A public method which returns the access token.
 func (g *GoogleProvider) GetAccessToken() string {
 	if g.Token == nil {
 		return ""
 	}
-
 	return g.Token.AccessToken
 }
 
+// A public method which returns the refresh token.
 func (g *GoogleProvider) GetRefreshToken() string {
 	if g.Token == nil {
 		return ""
 	}
-
 	return g.Token.RefreshToken
 }
 
+// A public method which returns the access token validity.
 func (g *GoogleProvider) IsTokenValid() bool {
 	return g.Token.Valid()
 }
 
+// `RefreshToken` takes `userID` and `force` to generate a new access token from the refresh token stored
+// in the database and updates the `GoogleProvider` struct with the new configuration.
 func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string, force bool) (*oauth2.Token, error) {
 	ctx := context.Background()
+
+	// If the token is already nil, it means there wasn't a session to begin with.
 	if g.Token == nil {
 		return nil, util.NewAppError(
 			http.StatusNotFound,
@@ -106,6 +113,10 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string, force bool) (
 			"NewGoogleProvider, RefreshToken() error",
 		)
 	}
+	// If force is true, we refresh the token even if it's still valid.
+	// Bug: This has to be done, bcz sometimes the the Google Drive API
+	// returns `Unauthorized` even when the token is still valid.
+	// Refer to `https://github.com/nilotpaul/go-downloader/issues/1`.
 	if force {
 		g.Token.Expiry = time.Now().AddDate(-100, 0, 0)
 	}
@@ -127,14 +138,18 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string, force bool) (
 		)
 	}
 
+	// Updating the `GoogleProvider` struct with the token and a new HTTP client.
 	g.Token = newToken
 	g.HttpClient = g.Config.Client(ctx, newToken)
-	if err := service.UpdateAccountByUserID(g.db, userID, &types.GoogleAccount{
+
+	// Updating the database with new tokens.
+	err = service.UpdateAccountByUserID(g.db, userID, &types.GoogleAccount{
 		AccessToken:  g.Token.AccessToken,
 		RefreshToken: g.Token.RefreshToken,
 		TokenType:    g.Token.TokenType,
 		ExpiresAt:    g.Token.Expiry,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, util.NewAppError(
 			http.StatusNotFound,
 			"failed to update account with new tokens",
@@ -146,6 +161,8 @@ func (g *GoogleProvider) RefreshToken(c *fiber.Ctx, userID string, force bool) (
 	return g.Token, nil
 }
 
+// `GetAuthURL` returns a URL to OAuth 2.0 provider's consent page that asks for permissions
+// for the required scopes explicitly.
 func (g *GoogleProvider) GetAuthURL(state string) string {
 	return g.Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
@@ -203,6 +220,7 @@ func (g *GoogleProvider) CreateOrUpdateAccount() (string, error) {
 	return userID, nil
 }
 
+// `CreateSession` generates a session token and sets the cookie.
 func (g *GoogleProvider) CreateSession(c *fiber.Ctx, userID string) error {
 	if g.Token == nil {
 		return util.NewAppError(
@@ -212,6 +230,7 @@ func (g *GoogleProvider) CreateSession(c *fiber.Ctx, userID string) error {
 		)
 	}
 
+	// Generating a JWT session token with `userID`.
 	token, err := util.GenerateSessionToken(userID, g.env.SessionSecret)
 	if err != nil {
 		return util.NewAppError(
@@ -222,11 +241,16 @@ func (g *GoogleProvider) CreateSession(c *fiber.Ctx, userID string) error {
 		)
 	}
 
+	// Setting the session cookie with the generated session token.
 	util.SetSessionToken(c, token, g.env.Domain)
 
 	return nil
 }
 
+// `UpdateTokens` takes necessary token config which can also be nil
+// We update the `GoogleProvider` struct with empty token or with token config.
+// This is mostly used in a middleware to keep all the states in sync.
+// Refer to `api/middleware/session_middleware.go`
 func (g *GoogleProvider) UpdateTokens(acc *types.GoogleAccount) error {
 	if acc == nil {
 		g.Token = nil

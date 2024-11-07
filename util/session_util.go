@@ -127,5 +127,6 @@ func ResetSession(c *fiber.Ctx, r types.OAuthProvider, domain string) error {
 		Expires:  time.Now().AddDate(-100, 0, 0),
 		Domain:   domain,
 	})
+
 	return r.UpdateTokens(nil)
 }
