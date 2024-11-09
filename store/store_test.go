@@ -41,45 +41,49 @@ func TestNewProviderRegistry(t *testing.T) {
 	assert.Empty(t, r.Providers)
 }
 
-func TestNewProviderRegistry_RegisterAndGetProvider(t *testing.T) {
+func TestProviderRegistry_RegisterAndGetProvider(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
 	r := NewProviderRegistry()
 
 	mockProvider := &MockProvider{}
 
 	// Registering an OAuth Provider
 	r.Register("mock_provider", mockProvider)
-	assert.Equal(t, len(r.Providers), 1)
+	a.Equal(len(r.Providers), 1)
 
 	// Getting a non-existent Provider
 	p, err := r.GetProvider("non-existent")
-	assert.Error(t, err)
-	assert.Equal(t, "provider not found", err.Error())
-	assert.Nil(t, p)
+	a.Error(err)
+	a.Equal("provider not found", err.Error())
+	a.Nil(p)
 
 	// Getting the Mock Provider
 	mp, err := r.GetProvider("mock_provider")
-	assert.NoError(t, err)
-	assert.Equal(t, mockProvider, mp)
+	a.NoError(err)
+	a.Equal(mockProvider, mp)
 
 	// Adding another Mock Provider
 	r.Register("mock_provider_2", mockProvider)
 	newMp, err := r.GetProvider("mock_provider")
-	assert.NoError(t, err)
-	assert.Equal(t, mockProvider, newMp)
-	assert.Equal(t, len(r.Providers), 2)
+	a.NoError(err)
+	a.Equal(mockProvider, newMp)
+	a.Equal(len(r.Providers), 2)
 }
 
 func TestInitStore(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
 	// Mock the database connection.
 	var db *sql.DB
 
 	// Testing with no environment variables which means no providers will be assigned.
 	r := InitStore(config.EnvConfig{}, db)
 	gp, err := r.GetProvider(setting.GoogleProvider)
-	assert.Error(t, err)
-	assert.Equal(t, "provider not found", err.Error())
-	assert.Nil(t, gp)
-	assert.Equal(t, len(r.Providers), 0)
+	a.Error(err)
+	a.Equal("provider not found", err.Error())
+	a.Nil(gp)
+	a.Equal(len(r.Providers), 0)
 
 	// Testing with Google OAuth Provider.
 	env := config.EnvConfig{
@@ -91,7 +95,7 @@ func TestInitStore(t *testing.T) {
 
 	r = InitStore(env, db)
 	gp, err = r.GetProvider(setting.GoogleProvider)
-	assert.NoError(t, err)
-	assert.NotNil(t, gp)
-	assert.Equal(t, len(r.Providers), 1)
+	a.NoError(err)
+	a.NotNil(gp)
+	a.Equal(len(r.Providers), 1)
 }

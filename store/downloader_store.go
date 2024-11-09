@@ -10,14 +10,39 @@ import (
 	"github.com/nilotpaul/go-downloader/types"
 )
 
+// Will be used later when we refactor for supporting multiple providers.
+// type downloadFunc func(interface{}, context.Context, string) error
+
+// Note: This is not a generic function which can support all provider.
+type downloadFunc func(service.GDriveDownloadConfig, chan<- *types.Progress, context.Context) error
+
 type Downloader struct {
-	progressChans      map[string]chan *types.Progress
-	ErrChans           map[string]chan error
-	FileIDs            []string
-	DestinationPath    string
-	PendingDownloads   map[string]*types.Progress
-	cancelFuncs        map[string]context.CancelFunc
+	// progressChans map holds progress channel for every file to be downloaded.
+	progressChans map[string]chan *types.Progress
+
+	// ErrChans map holds the error channel for every file to be downloaded.
+	ErrChans map[string]chan error
+
+	// FileIDs is a list of all files that needs to be downloaded.
+	FileIDs []string
+
+	// DestinationPath is the location where we want to store downloads.
+	// This can be an empty string representing that a default path will
+	// be used provided in env.
+	DestinationPath string
+
+	// PendingDownloads map holds the progress status for every ongoing
+	// downloads aggregated.
+	PendingDownloads map[string]*types.Progress
+	// pendingDownloadsMu is used for thread safe access of PendingDownloads map.
 	pendingDownloadsMu sync.RWMutex
+
+	// downloadFunc is a generic function used for downloading files.
+	downloadFunc downloadFunc
+
+	// cancelFuncs map holds cancel function from `context.WithCancel(ctx)` for
+	// every file that needs to be downloaded.
+	cancelFuncs map[string]context.CancelFunc
 }
 
 func NewDownloader(fileIds []string, destinationPath string) *Downloader {
@@ -28,42 +53,41 @@ func NewDownloader(fileIds []string, destinationPath string) *Downloader {
 		DestinationPath:  destinationPath,
 		PendingDownloads: make(map[string]*types.Progress),
 		cancelFuncs:      make(map[string]context.CancelFunc),
+		downloadFunc:     service.GDriveDownloader,
 	}
 }
 
 func (d *Downloader) StartDownload(ctx context.Context, accToken string, fileName string) error {
 	// For every file
 	for _, fileID := range d.FileIDs {
-		// Making progress channel and storing it in the `progressChans` map.
-		progChan := make(chan *types.Progress)
-		d.progressChans[fileID] = progChan
+		// Initializing the necessary states for each file and
+		// storing them for later usage.
+		state := d.initializeDownload(fileID, ctx)
 
-		// Making error channel and storing it in the `ErrChans` map.
-		errChan := make(chan error)
-		d.ErrChans[fileID] = errChan
-
-		// Making context for each file and storing it in `cancelFuncs` map.
-		downloadCtx, cancel := context.WithCancel(ctx)
-		d.cancelFuncs[fileID] = cancel
+		// Config for a single file
+		downloadCfg := service.DownloaderConfig{
+			FileID:          fileID,
+			DestinationPath: d.DestinationPath,
+			FileName:        fileName,
+		}
 
 		// Start multiple downloads in dedicated go routines
 		go func(fileID string) {
-			err := service.GDriveDownloader(service.DownloaderConfig{
-				FileID:          fileID,
-				DestinationPath: d.DestinationPath,
-				FileName:        fileName,
-				AccessToken:     accToken,
-			}, progChan, downloadCtx)
+			err := d.downloadFunc(service.GDriveDownloadConfig{
+				DownloaderConfig: downloadCfg,
+				AccessToken:      accToken,
+			}, state.progChan, state.downloadCtx)
 
 			// For any errors in between download, they'll be sent to their respective error channel.
 			if err != nil {
 				log.Errorf("error downloading file %s: %v\n", fileID, err)
-				errChan <- err
+				state.errChan <- err
 			}
 
 			// Closing the progress and error channel, deleting them from `progressChans` and `errorChans` map
 			// with it's progress status to mark the download as complete -> can be due
 			// to an error or successful completion.
+			// time.Sleep(300 * time.Second)
 			d.cleanUp(fileID)
 		}(fileID)
 	}
@@ -74,14 +98,6 @@ func (d *Downloader) StartDownload(ctx context.Context, accToken string, fileNam
 	}
 
 	return nil
-}
-
-// handleProgressUpdates takes a `fileID` and `progChan`, ranges over the channel itself
-// and sets it's progress continuously.
-func (d *Downloader) handleProgressUpdates(fileID string, progChan chan *types.Progress) {
-	for prog := range progChan {
-		d.SetProgress(fileID, prog)
-	}
 }
 
 // GetPendingDownloads a slice of `progress` which is a pointer, it ranges
@@ -160,16 +176,53 @@ func (d *Downloader) CancelAllDownloads() {
 	}
 }
 
+// State that will be initialized by initializeDownload below.
+type initializedState struct {
+	progChan    chan *types.Progress
+	errChan     chan error
+	downloadCtx context.Context
+}
+
+// initializeDownload creates necessary states for a file to be downloaded and stores them
+// in the `Download` struct and returns the `initializedState`.
+func (d *Downloader) initializeDownload(fileID string, ctx context.Context) initializedState {
+	// Making progress channel and storing it in the `progressChans` map.
+	progChan := make(chan *types.Progress)
+	d.progressChans[fileID] = progChan
+
+	// Making error channel and storing it in the `ErrChans` map.
+	errChan := make(chan error)
+	d.ErrChans[fileID] = errChan
+
+	// Making context for each file and storing it in `cancelFuncs` map.
+	downloadCtx, cancel := context.WithCancel(ctx)
+	d.cancelFuncs[fileID] = cancel
+
+	return initializedState{
+		progChan:    progChan,
+		errChan:     errChan,
+		downloadCtx: downloadCtx,
+	}
+}
+
+// handleProgressUpdates takes a `fileID` and `progChan`, ranges over the channel itself
+// and sets it's progress continuously.
+func (d *Downloader) handleProgressUpdates(fileID string, progChan chan *types.Progress) {
+	for prog := range progChan {
+		d.SetProgress(fileID, prog)
+	}
+}
+
 // cleanUp removes the state for a file, progress and error channels are closed and deleted,
 // progress status is also removed.
 func (d *Downloader) cleanUp(fileID string) {
-	close(d.progressChans[fileID])
-	close(d.ErrChans[fileID])
-
-	delete(d.progressChans, fileID)
-	delete(d.ErrChans, fileID)
-
 	d.pendingDownloadsMu.Lock()
 	delete(d.PendingDownloads, fileID)
 	d.pendingDownloadsMu.Unlock()
+
+	close(d.ErrChans[fileID])
+	close(d.progressChans[fileID])
+
+	delete(d.progressChans, fileID)
+	delete(d.ErrChans, fileID)
 }

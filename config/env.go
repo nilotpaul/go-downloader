@@ -8,21 +8,21 @@ import (
 
 // Main env configuration
 type EnvConfig struct {
-	Environment         string `envconfig:"ENVIRONMENT"`
-	Port                string `envconfig:"PORT"`
-	DBURL               string `envconfig:"DB_URL"`
-	AppURL              string `envconfig:"APP_URL"`
-	Domain              string `envconfig:"DOMAIN"`
+	Environment         string `envconfig:"ENVIRONMENT" default:"DEV"`
+	Port                string `envconfig:"PORT" required:"true"`
+	DBURL               string `envconfig:"DB_URL" required:"true"`
+	AppURL              string `envconfig:"APP_URL" required:"true"`
+	Domain              string `envconfig:"DOMAIN" required:"true"`
 	DefaultDownloadPath string `envconfig:"DEFAULT_DOWNLOAD_PATH"`
 
-	SessionSecret string `envconfig:"SESSION_SECRET"`
+	SessionSecret string `envconfig:"SESSION_SECRET" required:"true"`
 	GoogleOAuthEnvConfig
 }
 
 // Google OAuth specific configuration
 type GoogleOAuthEnvConfig struct {
-	GoogleClientID     string `envconfig:"GOOGLE_CLIENT_ID"`
-	GoogleClientSecret string `envconfig:"GOOGLE_CLIENT_SECRET"`
+	GoogleClientID     string `envconfig:"GOOGLE_CLIENT_ID" required:"true"`
+	GoogleClientSecret string `envconfig:"GOOGLE_CLIENT_SECRET" required:"true"`
 }
 
 func loadEnv() (*EnvConfig, error) {

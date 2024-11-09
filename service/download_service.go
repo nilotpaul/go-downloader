@@ -17,11 +17,15 @@ type DownloaderConfig struct {
 	FileID          string
 	DestinationPath string
 	FileName        string
-	AccessToken     string
+}
+
+type GDriveDownloadConfig struct {
+	DownloaderConfig
+	AccessToken string
 }
 
 // GDriveDownloader will fallback to the original filename in if the `filename` parameter is an empty string.
-func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx context.Context) error {
+func GDriveDownloader(cfg GDriveDownloadConfig, progChan chan<- *types.Progress, ctx context.Context) error {
 	// Validates the downloader configuration.
 	if err := validateDownloaderConfig(cfg); err != nil {
 		return err
@@ -129,7 +133,7 @@ func GDriveDownloader(cfg DownloaderConfig, progChan chan<- *types.Progress, ctx
 	return nil
 }
 
-func validateDownloaderConfig(cfg DownloaderConfig) error {
+func validateDownloaderConfig(cfg GDriveDownloadConfig) error {
 	if len(cfg.FileID) == 0 {
 		return fmt.Errorf("invalid file id")
 	}
