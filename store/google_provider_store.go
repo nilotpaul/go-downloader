@@ -50,7 +50,7 @@ func NewGoogleProvider(cfg googleProviderConfig, db *sql.DB, env config.EnvConfi
 	}
 }
 
-// `Authenticate` exchanges the authorization code for an access token.
+// `Authenticate` exchanges the authorization code for a OAuth Token.
 func (g *GoogleProvider) Authenticate(authCode string) error {
 	ctx := context.Background()
 	token, err := g.Config.Exchange(ctx, authCode, oauth2.ApprovalForce)

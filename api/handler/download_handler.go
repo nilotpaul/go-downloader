@@ -72,7 +72,7 @@ func (h *DownloadHandler) DownloadHandler(c *fiber.Ctx) error {
 		)
 	}
 
-	// Range over all the folder IDs.
+	// Ranging over all the folder IDs.
 	for _, folderID := range IDs["folder"] {
 		// Use the each `folderID` to extract its fileIds.
 		fileIDs, err := util.GetFileIDsFromFolder(srv, folderID)

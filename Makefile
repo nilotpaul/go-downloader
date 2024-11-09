@@ -1,4 +1,4 @@
-include ./.env
+include .env
 
 MIGRATION_PATH = migrations
 
@@ -10,8 +10,12 @@ run: build
 build:
 	@ENVIRONMENT=PROD go build -tags '!dev' -o bin/go-downloader
 
+# Testing
 test:
 	@go test -v ./...
+
+test-race:
+	@go test -v ./... --race
 
 # Database Commands
 db-status:
